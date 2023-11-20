@@ -17,7 +17,7 @@ def get_gumbelsoftmax_sample(logit_vector, hard_flag=True, tau=1):
 
 def get_linearnonlinear_function(input_dim, output_dim):
     transition_mtr= nn.Linear(output_dim,input_dim) #should be fixed. need to detach?
-    def func(input_dim, output_dim):
+    def func(input_tensor):
         return F.sigmoid(torch.matmul(transition_mtr,input_tensor))
     return func
 
@@ -69,7 +69,7 @@ class Decoder(nn.Module):
                 return self.partition(agent_idx)
 
         #initialize policies (input is 2: integer abstract action and integer abstract agent index)
-        self.action_policies =[action_policies.append(get_linearnonlinear_function(action_dim, 2)) for i in range(num_agents)]
+        self.action_policies =[get_linearnonlinear_function(action_dim, 2) for i in range(num_agents)]
 
     def init_index_mode_partition(num_abs_agents,num_agents, init_prob=0.99):
         abs_agent_idxs = np.random.randint(num_abs_agents,size=num_agents)
@@ -87,7 +87,7 @@ class Decoder(nn.Module):
             abs_agent_idx, abs_action = get_abs_agent_and_action(abs_actions,agent_idx) # can this be vectorized to avoid the loop over all agents?
 
             # put that through an agent specific network that gives the action
-            action = action_policy([abs_agent_idx, abs_action])
+            action = action_policy(torch.FloatTensor([abs_agent_idx, abs_action]))
             output_actions.append(action)
 
         logging.info(f"Output output_actions: {output_actions}")
@@ -99,16 +99,6 @@ class Decoder(nn.Module):
         one_hot_vector=get_gumbelsoftmax_sample(logits)
         abs_agent_idx = torch.where(one_hot_vector)[0]
         return abs_agent_idx, abs_actions[abs_agent_idx]
-
-    def deterministic_policy(abs_action,abs_agent):
-                state=sample_initial_state(state_space_dim)
-        transition_mtr= nn.Linear(state_space_dim,state_space_dim+num_agents) #should be fixed. need to detach?
-
-    def sample_initial_state(state_space_dim):
-        return torch.Tensor(np.random.rand(state_space_dim)) # is this right?
-    
-    def step(state,actions):
-        return F.sigmoid(torch.matmul(transition_mtr,torch.vstack((self.state,torch.Tensor(actions)))))
 
 class GumbelPartitionModel(nn.Module):
     def __init__(self, state_space_dim, abs_action_space_dim, hidden_dim, num_abs_agents, action_dim=2):
@@ -132,13 +122,13 @@ class GumbelPartitionModel(nn.Module):
 class Environment(state_space_dim,num_agents):
     def __init__(self,):
         state=sample_initial_state(state_space_dim)
-        step_func=get_linearnonlinear_function(state_space_dim,state_space_dim+num_agents)
+        transition_step_func=get_linearnonlinear_function(state_space_dim,state_space_dim+num_agents)
 
     def sample_initial_state(state_space_dim):
         return torch.Tensor(np.random.rand(state_space_dim)) # is this right?
     
     def step(state,actions):
-        return step_func(torch.vstack((self.state,torch.Tensor(actions))))
+        return transition_step_func(torch.vstack((self.state,torch.Tensor(actions))))
 
 writer = SummaryWriter()
 
