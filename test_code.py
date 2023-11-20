@@ -34,23 +34,21 @@ class Encoder(nn.Module):
         self.fc2 = nn.Linear(hidden_dim, self.joint_abs_action_dim)
 
     def forward(self, state):
-        logging.info(f"Input state: {state}")
         x = F.relu(self.fc1(torch.Tensor([state])))
         logits = self.fc2(x)
 
         # do gumbel softmax for each abs agent and collect results
         # gumbel_softmax_index_samples = torch.empty(num_abs_agents, abs_action_space_dim, dtype=torch.long)
-        gumbel_softmax_index_samples = []
+        abstract_actions = []
         for abs_agent_id in range(num_abs_agents):
             abs_agent_logits = logits[abs_agent_id*abs_action_space_dim:(abs_agent_id+1)*abs_action_space_dim]
             one_hot_vector = get_gumbelsoftmax_sample(abs_agent_logits)
-            gumbel_softmax_index_samples.append(torch.where(one_hot_vector)[0]) #could store as onehot:
+            abstract_actions.append(torch.where(one_hot_vector)[0]) #could store as onehot:
             # gumbel_softmax_index_samples[abs_agent_id] = one_hot_vector 
-        logging.info(f"Output gumbel_softmax_index_samples: {gumbel_softmax_index_samples}")
-        return gumbel_softmax_index_samples
+        return abstract_actions 
 
 class Decoder(nn.Module):
-    def __init__(self, num_abs_agents,num_agents,abs_action_space_dimension, action_dim = 2):
+    def __init__(self, num_abs_agents,num_agents,abs_action_space_dimension, action_space_dim = 2):
         super(Decoder, self).__init_
 
         #initialize partition
@@ -68,8 +66,8 @@ class Decoder(nn.Module):
             else:
                 return self.partition(agent_idx)
 
-        #initialize policies (input is 2: integer abstract action and integer abstract agent index)
-        self.action_policies =[get_linearnonlinear_function(action_dim, 2) for i in range(num_agents)]
+        #initialize policies (input dimension is 2: integer abstract action and integer abstract agent index)
+        self.action_policies =[get_linearnonlinear_function(action_space_dim, 2) for i in range(num_agents)]
 
     def init_index_mode_partition(num_abs_agents,num_agents, init_prob=0.99):
         abs_agent_idxs = np.random.randint(num_abs_agents,size=num_agents)
@@ -78,20 +76,18 @@ class Decoder(nn.Module):
         return torch.Tensor(partition)
 
     def decode(self, abs_actions):
-        logging.info(f"Input abs_actions: {abs_actions}")
 
         # for each ground agent
-        output_actions=[]
+        actions=[]
         for agent_idx, action_policy in enumerate(self.action_policies):
             # given the partition, get it's corresponding abstract agent info 
             abs_agent_idx, abs_action = get_abs_agent_and_action(abs_actions,agent_idx) # can this be vectorized to avoid the loop over all agents?
 
             # put that through an agent specific network that gives the action
-            action = action_policy(torch.FloatTensor([abs_agent_idx, abs_action]))
-            output_actions.append(action)
-
-        logging.info(f"Output output_actions: {output_actions}")
-        return output_actions
+            action_weight = action_policy(torch.FloatTensor([abs_agent_idx, abs_action]))
+            action = action_weight > 0 #really this is part of the policy
+            actions.append(action)
+        return actions
 
     def get_abs_agent_and_action(abs_actions,agent_idx):
         abs_agent_assignment_probabilities = get_abs_agent_assignment_probabilities(agent_idx)
@@ -101,7 +97,7 @@ class Decoder(nn.Module):
         return abs_agent_idx, abs_actions[abs_agent_idx]
 
 class GumbelPartitionModel(nn.Module):
-    def __init__(self, state_space_dim, abs_action_space_dim, hidden_dim, num_abs_agents, action_dim=2):
+    def __init__(self, state_space_dim, abs_action_space_dim, hidden_dim, num_abs_agents, action_space_dim=2):
         super().__init__()
         self.encoder = Encoder(
             state_space_dim,
@@ -111,10 +107,11 @@ class GumbelPartitionModel(nn.Module):
             )
         self.decoder = Decoder(
             abs_action_space_dim,
-            action_dim)
+            action_space_dim)
 
     def forward(self, state, hard_flag=True):
         abs_actions = self.encoder.forward(state, hard_flag)
+        logging.info(f"Abstract actions: {abs_actions}")
         actions = self.decoder.decode(abs_actions)
         return actions
 
@@ -132,17 +129,22 @@ class Environment(state_space_dim,num_agents):
 
 writer = SummaryWriter()
 
-# ground system
-num_agents = 10
-state_space_dim = K
-action_dim = 2
+# System parameters
+K = 10   # states
+L = 10   # abstract actions
+M = 10   # abstract agents
+N = 100  # agents
 
-# abstraction system
-abs_action_space_dim = 10
-hidden_dim = 10
+# Ground system
+num_agents = N
+state_space_dim = K  # vector space dimensionality
+action_space_dim = 2 # number of discrete actions; fixed to 2 for simplicity
 
-#partition parameters (only needed in fixed-partition mode)
-num_abs_agents = 2
+# Abstracted system
+num_abs_agents = M
+abs_action_space_dim = L # number of discrete abstract actions
+#abstract action policy network parameters
+hidden_dim = 256
 
 env = Environment(state_space_dim, num_agents)
 
@@ -151,7 +153,7 @@ model = GumbelPartitionModel(
     abs_action_space_dim,
     hidden_dim,
     num_abs_agents,
-    action_dim=action_dim
+    action_space_dim=action_space_dim
     )
 
 if __name__ == '__main__':
@@ -160,6 +162,7 @@ if __name__ == '__main__':
         logging.info(f"Step: {step}")
         writer.add_graph(model, env.state)
         writer.close()
-        logging.info(f"Input state: {state}")
+        logging.info(f"Input state: {env.state}")
         actions = model.forward(env.state, hard_flag=False)
+        logging.info(f"Output actions: {actions}")
         env.state = env.step(env.state,actions)
