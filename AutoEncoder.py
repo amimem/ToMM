@@ -31,20 +31,18 @@ class Encoder(nn.Module):
             # gumbel_softmax_index_samples[abs_agent_id] = one_hot_vector 
         return abstract_actions 
 
-class Decoder(nn.Module):
-    def __init__(self, num_abs_agents,num_agents,abs_action_space_dim, action_space_dim = 2, index_mode = True):
+class Decoder(nn.Module): #TODO: pullout assigner code into its own class
+    def __init__(self, num_abs_agents,num_agents,abs_action_space_dim, action_space_dim = 2, index_mode = False):
         super(Decoder, self).__init__()
         self.num_agents = num_agents
         #initialize partition
         self.index_mode = index_mode
-        if index_mode:
-            w = torch.empty(num_agents,num_abs_agents)
-            self.partition_logits = nn.init.normal_(w)
-            # =self.init_index_mode_partition(num_abs_agents,num_agents) # a matrix
-        else: # embedding mode
-            embedding_dim = 256
-            self.embedded_agents=nn.Embedding(num_embeddings=num_agents, embedding_dim=embedding_dim)
-            self.partition_logits= None #? # a differentiable state-to-partition-element function (partition element represented as onehot) that partitions the embedding space into num_abs_agents regions (e.g. if using hyperplanes, would need log2(num_abs_agents) of them)
+        w = torch.empty(num_agents,num_abs_agents)
+        self.partition_logits = nn.init.normal_(w)
+        
+        embedding_dim = 256
+        self.embedded_agents=nn.Embedding(num_embeddings=num_agents, embedding_dim=embedding_dim)
+        self.partition_logits= None #? # a differentiable state-to-partition-element function (partition element represented as onehot) that partitions the embedding space into num_abs_agents regions (e.g. if using hyperplanes, would need log2(num_abs_agents) of them)
 
         #initialize policies (input dimension is 1 (integer abstract action) 1+who it is for index mode and 1+embed_dim for embeding mode)
         input_dim = 1 + 1 if self.index_mode else 1 + embedding_dim
@@ -58,10 +56,7 @@ class Decoder(nn.Module):
     #     return torch.Tensor(partition)
 
     def get_abs_agent_assignment_logits(self,agent_idx,index_mode=True):
-        if index_mode:
-            return self.partition_logits[agent_idx]
-        else:
-            return self.partition_logits(agent_idx)
+        return self.partition_logits[agent_idx]
 
     def get_abs_agent(self, agent_idx): # can this be vectorized to avoid the loop over all agents?
         abs_agent_assignment_logits = self.get_abs_agent_assignment_logits(agent_idx)
@@ -70,19 +65,15 @@ class Decoder(nn.Module):
         return abs_agent_idx
 
     def forward(self, abs_actions):
-        actions=[]
+        action_probability_vectors=[]
         for agent_idx in range(self.num_agents):
             # given the partition, get it's corresponding abstract agent info 
             abs_agent_idx = self.get_abs_agent(agent_idx)
-            print(abs_agent_idx)
             if self.index_mode:
                 input_tensor = torch.FloatTensor([abs_actions[abs_agent_idx],agent_idx])
             else:
                 input_tensor = torch.FloatTensor([abs_actions[abs_agent_idx],self.embedded_agents[agent_idx]])
             action_probability_vector = F.softmax(self.shared_action_policy_logits(input_tensor))
-            
-            #take greedy action
-            action = torch.argmax(action_probability_vector)  #really this is part of the policy
-            
-            actions.append(action)
-        return actions
+            action_probability_vectors.append(action_probability_vector)
+
+        return action_probability_vectors

@@ -1,9 +1,9 @@
 from torch import nn
 from AutoEncoder import Encoder, Decoder
 
-class GumbelPartitionModel(nn.Module):
+class AbstractionModelJointPolicy(nn.Module):
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2):
-        super(GumbelPartitionModel, self).__init__()
+        super(AbstractionModelJointPolicy, self).__init__()
         
         # Define the encoder and decoder
         self.encoder = Encoder(state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
@@ -13,7 +13,7 @@ class GumbelPartitionModel(nn.Module):
         # Pass the state through the encoder to get abstract actions
         abs_actions = self.encoder(state)
         
-        # Pass the abstract actions through the decoder to get actions
-        actions = self.decoder(abs_actions)
+        # Pass the abstract actions through the decoder to get action probabilities
+        action_probability_vectors = self.decoder(abs_actions)
         
-        return actions
+        return action_probability_vectors
