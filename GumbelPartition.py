@@ -1,5 +1,5 @@
 from torch import nn
-from gumbel_partition.AutoEncoder import Encoder, Decoder
+from AutoEncoder import Encoder, Decoder
 
 class GumbelPartitionModel(nn.Module):
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2):

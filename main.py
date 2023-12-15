@@ -5,8 +5,8 @@ import torch.distributions as distributions
 import numpy as np
 import logging
 
-from gumbel_partition.Environment import Environment
-from gumbel_partition.GumbelPartition import GumbelPartitionModel
+from Environment import Environment
+from GumbelPartition import GumbelPartitionModel
 
 from torch.utils.tensorboard import SummaryWriter
 

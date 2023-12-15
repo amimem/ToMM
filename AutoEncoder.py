@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import numpy as np
-from gumbel_partition.utils import get_gumbel_softmax_sample, get_linear_nonlinear_function
+from utils import get_gumbel_softmax_sample, get_linear_nonlinear_function
 
 class Encoder(nn.Module):
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents):

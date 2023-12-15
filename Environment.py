@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from gumbel_partition.utils import get_linear_nonlinear_function
+from utils import get_linear_nonlinear_function
 
 def sample_initial_state(state_space_dim):
     # Sample an initial state from a uniform distribution
