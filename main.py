@@ -24,21 +24,22 @@ N = 100  # agents
 num_agents = N
 state_space_dim = K  # vector space dimensionality
 action_space_dim = 2 # number of discrete actions; fixed to 2 for simplicity
+epsiode_length = 10
 
 # Abstracted system
 num_abs_agents = M
 abs_action_space_dim = L # number of discrete abstract actions
 #abstract action policy network parameters
-hidden_dim = 256
+enc_hidden_dim = 256
 
 # Initialize environment and model
-env = Environment(state_space_dim, num_agents)
+env = Environment(state_space_dim, num_agents, epsiode_length)
 
 # Initialize model
 model = GumbelPartitionModel(
     state_space_dim,
     abs_action_space_dim,
-    hidden_dim,
+    enc_hidden_dim,
     num_agents,
     num_abs_agents,
     action_space_dim=action_space_dim
@@ -46,6 +47,7 @@ model = GumbelPartitionModel(
 
 if __name__ == '__main__':
     num_steps = 5
+    episode_time_indices = []
     for step in range(num_steps):
         logging.info(f"Step: {step}")
         writer.add_graph(model, env.state)
@@ -53,6 +55,7 @@ if __name__ == '__main__':
         logging.info(f"Input state: {env.state}")
         actions = model.forward(env.state)
         logging.info(f"Output actions: {actions}")
-        env.state = env.step(env.state, actions)
+        env.state, episode_step = env.step(env.state, actions)
+        episode_time_indices.append(episode_step)
 
 
