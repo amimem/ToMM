@@ -42,8 +42,7 @@ class GroundModelJointPolicy(nn.Module):
         
     def forward(self, state):
         state_idx = self.get_state_idx(state.detach().cpu().numpy())
-        action_probability_vectors=np.zeros((self.num_agents,self.action_space_dim))
-        action_probability_vectors[:,self.action_policies[:,state_idx].astype(int)]=1
+        action_probability_vectors=np.hstack((self.action_policies[:,state_idx][:,None],~self.action_policies[:,state_idx][:,None]))
         return torch.Tensor(action_probability_vectors)
 
     def get_state_idx(self, state):

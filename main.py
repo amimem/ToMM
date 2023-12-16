@@ -46,32 +46,35 @@ abstractionmodel = AbstractionModelJointPolicy(
 
 # Initialize ground model
 baseline_paras={}
-baseline_paras["corr"]=0.5
-baseline_paras['gen_type'] = 'mix'
+baseline_name='bitpop'
+if baseline_name == 'bitpop':
+    baseline_paras["corr"]=0.6
+    # baseline_paras['gen_type'] = 'mix'
+    baseline_paras['gen_type'] = 'sum'
 agents_per_abstract_agent=int(num_agents/num_abs_agents)
 groundmodel = GroundModelJointPolicy(
     state_space_dim, 
     num_abs_agents, 
     agents_per_abstract_agent, 
     action_space_dim=2, 
-    baseline = 'bitpop', 
+    baseline = baseline_name, 
     baseline_paras=baseline_paras
     )
 
 if __name__ == '__main__':
-    
-    
     output_path = 'output/'
-    if ~os.path.exists(output_path):
-        os.makedirs(output_path)
+    # if ~os.path.exists(output_path):
+    #     os.makedirs(output_path)
 
     #example rollout
-    num_steps = 5
+    num_steps = 100*epsiode_length
     exploit_mode = True
+    output_filenames=[]
     for model_name,model in zip(['groundmodel','abstractionmodel'],[groundmodel,abstractionmodel]):
         episode_time_indices = []
         state_seq = []
         joint_action_seq = []
+        print(f'seed:{seed}')
         env.state=env.sample_initial_state(state_space_dim,seed)
         for step in range(num_steps):
 
@@ -97,13 +100,14 @@ if __name__ == '__main__':
         data["times"] = episode_time_indices
         data["states"] = state_seq
         data["actions"] = joint_action_seq
-        np.save(f"output/rundata_{model_name}_exploit{exploit_mode}_{K}_L{L}_M{M}_N{N}_T{epsiode_length}",data)
+        if model_name=='groundmodel':
+            data['baseline_paras']=baseline_paras
+        filename=f"output/rundata_{model_name}_exploit{exploit_mode}_{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
+        np.save(filename,data)
+        output_filenames.append(filename)
 
-    #example plot
-    data=[]
-    for model_name in ['groundmodel','abstractionmodel']:
-        data.append(np.load(f"output/rundata_{model_name}_exploit{exploit_mode}_{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy",allow_pickle=True).item())
-    compare_plot(data)
+    #post simulation analysis
+    compare_plot(output_filenames)
 
 
 

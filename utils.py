@@ -22,28 +22,48 @@ def get_linear_nonlinear_function(input_dim, output_dim):
 
     return nonlinear_function
 
-def compare_plot(data_pair):
+def compare_plot(output_filenames,output_dir='output/'):
+    data_pair=[np.load(filename,allow_pickle=True).item() for filename in output_filenames]
     fig,ax = pl.subplots(2,3)
+
     for dit,dataset in enumerate(data_pair):
-        ax[dit,0].imshow(np.array(dataset["actions"]))
-        for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
-            ax[dit,0].axvline(epsiode_change_time)
-        ax[dit,0].set_ylabel('agent index')
+        actions = np.array(dataset["actions"])
+        states = np.array(dataset["states"])
+        num_agents = len(actions[0])
+        ax[dit,0].imshow(actions.T,extent=[0,actions.shape[0],0,actions.shape[1]], aspect='auto')
+        # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
+            # ax[dit,0].axvline(epsiode_change_time)
+        ax[dit,0].set_ylabel(dataset['model_name']+'\nagent index')
         ax[dit,0].set_xlabel('time index')
+        ax[dit,0].set_title('actions')
 
-        ax[dit,1].plot(np.linalg.norm(np.array(dataset["states"]),axis=1))
-        for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
-            ax[dit,1].axvline(epsiode_change_time)
-        ax[dit,1].set_ylabel('state index')
+        ax[dit,1].plot(np.linalg.norm(states,axis=1),'.')
+        # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
+            # ax[dit,1].axvline(epsiode_change_time)
         ax[dit,1].set_xlabel('time index')
+        ax[dit,1].set_title('state norm')
 
-def get_corr_matrix(index_seq, n_agents):
-    n_steps = len(index_seq)
-    sims = index2binary(index_seq, n_agents)
-    corr_matrix = np.zeros([n_agents] * 2)
-    for i in range(n_agents):
-        for j in range(n_agents):
+        corr_matrix=get_corr_matrix(dataset["actions"])
+        ax[dit,2].imshow(corr_matrix,extent=[0.5, num_agents+0.5,0.5, num_agents+0.5])
+        ax[dit,2].set_xticks([1]+list(ax[dit,2].get_xticks()))
+        ax[dit,2].set_yticks([1]+list(ax[dit,2].get_yticks()))
+        ax[dit,2].set_xlim(0.5,num_agents+0.5)
+        ax[dit,2].set_ylim(0.5,num_agents+0.5)
+
+        ax[dit,2].set_title('action correlations')
+        if dit==0:
+            fig.suptitle(r"ground model: $\rho="+str(dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
+    fig.tight_layout()
+    fig.savefig(f'{output_filenames[0][:-4]}_summary_fig.pdf', transparent=True,bbox_inches="tight",dpi=300)
+
+def get_corr_matrix(action_seq):
+    num_agents=len(action_seq[0])
+    num_steps = len(action_seq)
+    sims = np.array(action_seq).T
+    corr_matrix = np.zeros([num_agents] * 2)
+    for i in range(num_agents):
+        for j in range(num_agents):
             if i < j:
                 corr_matrix[i, j] = 2 * \
-                    np.sum(sims[i, :] == sims[j, :]) / n_steps - 1
-    return corr_matrix + corr_matrix.T + np.identity(n_agents)
+                    np.sum(sims[i, :] == sims[j, :]) / num_steps - 1
+    return corr_matrix + corr_matrix.T + np.identity(num_agents)
