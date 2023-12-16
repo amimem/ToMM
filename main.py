@@ -2,13 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as distributions
-import numpy as np
 import logging
 
 from Environment import Environment
 from AbstractionModelJointPolicy import AbstractionModelJointPolicy
 
-# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 logging.basicConfig(level=logging.INFO)
 
@@ -58,7 +57,7 @@ if __name__ == '__main__':
         action_probability_vectors = model.forward(env.state)
         
         #take greedy action
-        actions = torch.argmax(action_probability_vector,2)
+        actions = torch.argmax(action_probability_vectors,dim=-1)
         #sample
         # actions=[choices(action_probability_vector) for action_probability_vector in action_probability_vectors]  #from random import choices # Pyver>=3.6
         logging.info(f"Output actions: {actions}")
