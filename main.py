@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.distributions as distributions
+from torch.distributions import Categorical
 import logging
 
 from Environment import Environment
@@ -60,8 +60,7 @@ if __name__ == '__main__':
         if exploit_mode: #take greedy action
             actions = torch.argmax(action_probability_vectors,dim=-1)
         else: #sample
-            actions=[choices(range(action_space_dim),weights=action_probability_vector) for action_probability_vector in action_probability_vectors]  #from random import choices # Pyver>=3.6
-        
+            actions=Categorial(action_probability_vectors) #Categorical has batch functionality!
         logging.info(f"Output actions: {actions}")
         env.state, episode_step = env.step(env.state, actions)
         episode_time_indices.append(episode_step)
