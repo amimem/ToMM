@@ -43,8 +43,8 @@ class Decoder(nn.Module):
 
     def forward(self, abs_actions):
         one_hot_assignment_array = get_gumbel_softmax_sample(self.assigner_logit_array)
-        abstract_agent_assignments = torch.argmax(one_hot_assignment_array, dim=1)
+        abstract_agent_assignments = torch.argmax(one_hot_assignment_array, dim=-1)
         assigned_abstract_actions = abs_actions[abstract_agent_assignments]
         input_tensor = torch.cat([assigned_abstract_actions[:,None],self.agent_embedding(torch.LongTensor(range(self.num_agents)))],dim=-1)
-        action_probability_vectors = F.softmax(self.shared_action_policy_network(input_tensor))
+        action_probability_vectors = F.softmax(self.shared_action_policy_network(input_tensor),dim=-1)
         return action_probability_vectors
