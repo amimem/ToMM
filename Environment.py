@@ -29,4 +29,4 @@ class Environment(nn.Module):
             self.counter = 0
             return sample_initial_state(self.state_space_dim), self.T
         else:
-            return self.transition_func(torch.cat((state, actions))), self.counter
+            return self.transition_func(torch.cat([state, actions])), self.counter

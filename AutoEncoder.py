@@ -20,16 +20,15 @@ class Encoder(nn.Module):
     def forward(self, state):
         x = F.relu(self.fc1(state))
         logits = self.fc2(x)
-        logit_array = torch.reshape(logits,(self.abs_action_space_dim,self.num_abs_agents))
+        logit_array = torch.reshape(logits,(self.num_abs_agents,self.abs_action_space_dim))
         one_hot_array = get_gumbel_softmax_sample(logit_array)
-        abstract_actions = torch.argmax(one_hot_array, dim=1)
+        abstract_actions = torch.argmax(one_hot_array, dim=-1)
         return abstract_actions
 
-class Decoder(nn.Module): #TODO: pullout assigner code into its own class
-    def __init__(self, num_abs_agents,num_agents,abs_action_space_dim, action_space_dim = 2, index_mode = False):
+class Decoder(nn.Module):
+    def __init__(self, num_abs_agents,num_agents,abs_action_space_dim, action_space_dim = 2):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
-        self.index_mode = index_mode
 
         #initialize assigner
         w = torch.empty(num_agents,num_abs_agents)
@@ -39,20 +38,13 @@ class Decoder(nn.Module): #TODO: pullout assigner code into its own class
         embedding_dim = 256
         self.agent_embedding=nn.Embedding(num_embeddings=num_agents, embedding_dim=embedding_dim)
 
-        #initialize policies (input dimension is 1 (integer abstract action) 1+who it is for index mode and 1+embed_dim for embeding mode)
-        input_dim = 1 + 1 if self.index_mode else 1 + embedding_dim
-        linear_layer = nn.Linear(input_dim, action_space_dim)
-        self.shared_action_policy_network = nn.Linear(input_dim, action_space_dim)
+        #initialize policies (input dimension is 1 (abstract action index) + embed_dim)
+        self.shared_action_policy_network = nn.Linear(1 + embedding_dim, action_space_dim)
 
     def forward(self, abs_actions):
-
         one_hot_assignment_array = get_gumbel_softmax_sample(self.assigner_logit_array)
         abstract_agent_assignments = torch.argmax(one_hot_assignment_array, dim=1)
         assigned_abstract_actions = abs_actions[abstract_agent_assignments]
-        if self.index_mode:
-            input_tensor = torch.cat([assigned_abstract_actions[:,None],torch.range(num_agents)[:,None]],dim=-1)
-        else:
-            input_tensor = torch.cat([assigned_abstract_actions[:,None],self.agent_embedding(torch.LongTensor(range(self.num_agents)))],dim=-1)
+        input_tensor = torch.cat([assigned_abstract_actions[:,None],self.agent_embedding(torch.LongTensor(range(self.num_agents)))],dim=-1)
         action_probability_vectors = F.softmax(self.shared_action_policy_network(input_tensor))
-
         return action_probability_vectors

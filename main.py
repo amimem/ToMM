@@ -49,6 +49,7 @@ if __name__ == '__main__':
     #example rollout
     num_steps = 5
     episode_time_indices = []
+    exploit_mode = True
     for step in range(num_steps):
         logging.info(f"Step: {step}")
         writer.add_graph(model, env.state)
@@ -56,10 +57,11 @@ if __name__ == '__main__':
         logging.info(f"Input state: {env.state}")
         action_probability_vectors = model.forward(env.state)
         
-        #take greedy action
-        actions = torch.argmax(action_probability_vectors,dim=-1)
-        #sample
-        # actions=[choices(action_probability_vector) for action_probability_vector in action_probability_vectors]  #from random import choices # Pyver>=3.6
+        if exploit_mode: #take greedy action
+            actions = torch.argmax(action_probability_vectors,dim=-1)
+        else: #sample
+            actions=[choices(range(action_space_dim),weights=action_probability_vector) for action_probability_vector in action_probability_vectors]  #from random import choices # Pyver>=3.6
+        
         logging.info(f"Output actions: {actions}")
         env.state, episode_step = env.step(env.state, actions)
         episode_time_indices.append(episode_step)
