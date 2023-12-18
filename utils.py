@@ -22,8 +22,8 @@ def get_linear_nonlinear_function(input_dim, output_dim):
 
     return nonlinear_function
 
-def compare_plot(output_filenames,output_dir='output/'):
-    data_pair=[np.load(filename,allow_pickle=True).item() for filename in output_filenames]
+def compare_plot(pair_of_output_filenames,output_dir='output/'):
+    data_pair=[np.load(filename,allow_pickle=True).item() for filename in pair_of_output_filenames]
     fig,ax = pl.subplots(2,3)
 
     for dit,dataset in enumerate(data_pair):
@@ -34,14 +34,18 @@ def compare_plot(output_filenames,output_dir='output/'):
         # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
             # ax[dit,0].axvline(epsiode_change_time)
         ax[dit,0].set_ylabel(dataset['model_name']+'\nagent index')
-        ax[dit,0].set_xlabel('time index')
-        ax[dit,0].set_title('actions')
+        if dit==1:
+            ax[dit,0].set_xlabel('time index')
+        else:
+            ax[dit,0].set_title('actions')
 
         ax[dit,1].plot(np.linalg.norm(states,axis=1),'.')
         # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
             # ax[dit,1].axvline(epsiode_change_time)
-        ax[dit,1].set_xlabel('time index')
-        ax[dit,1].set_title('state norm')
+        if dit==1:
+            ax[dit,1].set_xlabel('time index')
+        else:
+            ax[dit,1].set_title('state norm')
 
         corr_matrix=get_corr_matrix(dataset["actions"])
         ax[dit,2].imshow(corr_matrix,extent=[0.5, num_agents+0.5,0.5, num_agents+0.5])
@@ -49,8 +53,12 @@ def compare_plot(output_filenames,output_dir='output/'):
         ax[dit,2].set_yticks([1]+list(ax[dit,2].get_yticks()))
         ax[dit,2].set_xlim(0.5,num_agents+0.5)
         ax[dit,2].set_ylim(0.5,num_agents+0.5)
+        ax[dit,2].set_ylabel('agent index')
+        if dit==1:
+            ax[dit,2].set_xlabel('agent index')
 
-        ax[dit,2].set_title('action correlations')
+        if dit==0:
+            ax[dit,2].set_title('action correlations')
         if dit==0:
             fig.suptitle(r"ground model: $\rho="+str(dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
     fig.tight_layout()

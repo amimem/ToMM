@@ -34,7 +34,7 @@ enc_hidden_dim = 256
 seed = 1
 env = Environment(state_space_dim, num_agents, epsiode_length, seed)
 
-# Initialize abstract model
+# Initialize abstraction system model
 abstractionmodel = AbstractionModelJointPolicy(
     state_space_dim,
     abs_action_space_dim,
@@ -44,7 +44,7 @@ abstractionmodel = AbstractionModelJointPolicy(
     action_space_dim=action_space_dim
     )
 
-# Initialize ground model
+# Initialize ground system model
 baseline_paras={}
 baseline_name='bitpop'
 if baseline_name == 'bitpop':
