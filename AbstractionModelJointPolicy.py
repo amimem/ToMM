@@ -47,15 +47,15 @@ class Encoder(nn.Module):
         independent_mode = False
         if independent_mode:
             enc_hidden_dim_per_policy = enc_hidden_dim/num_abs_agents
-            output dimension = abs_action_space_dim
+            output_dimension = abs_action_space_dim
             num_of_policy_realizations = num_abs_agents
         else:
             enc_hidden_dim_per_policy = enc_hidden_dim
-            output dimension = abs_action_space_dim*num_abs_agents
+            output_dimension = abs_action_space_dim*num_abs_agents
             num_of_policy_realizations = 1
-        self.abstract_agent_policies = [get_policy(state_space_dim,enc_hidden_dim_per_abs_agent, output_dim) for idx in range(num_of_policy_realizations)]
+        self.abstract_agent_policies = [get_policy(state_space_dim,enc_hidden_dim_per_policy, output_dimension) for idx in range(num_of_policy_realizations)]
     
-    def abstract_agent_joint_policy(state, independent_mode = False):
+    def abstract_agent_joint_policy(self, state, independent_mode = False):
         out_dims = (self.num_abs_agents,self.abs_action_space_dim)
         if independent_mode:
             abs_action_probability_list = [policy(state) for policy in self.abstract_agent_policies]
@@ -67,7 +67,7 @@ class Encoder(nn.Module):
         return logit_array
     
     def forward(self, state, independent_mode=False):
-        logit_array = abstract_agent_joint_policy(state)
+        logit_array = self.abstract_agent_joint_policy(state)
         one_hot_array = get_gumbel_softmax_sample(logit_array)
         abstract_actions = torch.argmax(one_hot_array, dim=-1)
         return abstract_actions
