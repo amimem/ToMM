@@ -33,25 +33,41 @@ class Encoder(nn.Module):
         self.num_abs_agents = num_abs_agents
         self.joint_abs_action_dim=abs_action_space_dim*num_abs_agents
 
-        # Define the neural network architecture, E.g.
+        # Define the neural network architecture type, E.g.
+        def get_policy(state_space_dim,enc_hidden_dim,output_dim):
+            fc1 = nn.Linear(state_space_dim, enc_hidden_dim)
+            fc2 = nn.Linear(enc_hidden_dim, output_dim)
+            def policy(state, fc1=fc1, fc2=fc2):
+                x = F.relu(fc1(state))
+                logits = fc2(x)
+                return logits
+            return policy
+
+        #realize the architecture
         independent_mode = False
         if independent_mode:
-            enc_hidden_dim_per_abs_agent = enc_hidden_dim/num_abs_agents
-            self.fc1 = [nn.Linear(state_space_dim, enc_hidden_dim_per_abs_agent) for idx in range(num_abs_agents)]
-            self.fc2 = [nn.Linear(enc_hidden_dim_per_abs_agent, self.joint_abs_action_dim) for idx in range(num_abs_agents)]
+            enc_hidden_dim_per_policy = enc_hidden_dim/num_abs_agents
+            output dimension = abs_action_space_dim
+            num_of_policy_realizations = num_abs_agents
         else:
-            self.fc1 = nn.Linear(state_space_dim, enc_hidden_dim)
-            self.fc2 = nn.Linear(enc_hidden_dim, self.joint_abs_action_dim)
-
-    def forward(self, state, independent_mode=False):
+            enc_hidden_dim_per_policy = enc_hidden_dim
+            output dimension = abs_action_space_dim*num_abs_agents
+            num_of_policy_realizations = 1
+        self.abstract_agent_policies = [get_policy(state_space_dim,enc_hidden_dim_per_abs_agent, output_dim) for idx in range(num_of_policy_realizations)]
+    
+    def abstract_agent_joint_policy(state, independent_mode = False):
+        out_dims = (self.num_abs_agents,self.abs_action_space_dim)
         if independent_mode:
-            x = [F.relu(self.fc1[idx](state)) for idx in range(self.num_abs_agents)]
-            logits = [self.fc2[idx](xelem) for xlem in x]
-            logits = torch.Tensor([item for row in logits for item in row])
+            abs_action_probability_list = [policy(state) for policy in self.abstract_agent_policies]
+            logit_array = torch.Tensor(out_dims)
+            logit_array = torch.cat(abs_action_probability_list, out=logit_array)
         else:
-            x = F.relu(self.fc1(state))
-            logits = self.fc2(x)
-        logit_array = torch.reshape(logits,(self.num_abs_agents,self.abs_action_space_dim))
+            logits = self.abstract_agent_policies[0](state)
+            logit_array = torch.reshape(logits,out_dims)
+        return logit_array
+    
+    def forward(self, state, independent_mode=False):
+        logit_array = abstract_agent_joint_policy(state)
         one_hot_array = get_gumbel_softmax_sample(logit_array)
         abstract_actions = torch.argmax(one_hot_array, dim=-1)
         return abstract_actions
