@@ -2,6 +2,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import matplotlib.pyplot as pl
 import numpy as np
+
 def get_gumbel_softmax_sample(logit_vector, tau=1):
     # Compute Gumbel softmax sample for both hard and soft cases
     y_hard = F.gumbel_softmax(logit_vector, tau=tau, hard=True)
@@ -33,7 +34,7 @@ def compare_plot(pair_of_output_filenames,output_dir='output/'):
         ax[dit,0].imshow(actions.T,extent=[0,actions.shape[0],0,actions.shape[1]], aspect='auto')
         # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
             # ax[dit,0].axvline(epsiode_change_time)
-        ax[dit,0].set_ylabel(dataset['model_name']+'\nagent index')
+        ax[dit,0].set_ylabel(dataset['model_name']+'\n\nagent index')
         if dit==1:
             ax[dit,0].set_xlabel('time index')
         else:

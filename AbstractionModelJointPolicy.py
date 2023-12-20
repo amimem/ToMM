@@ -30,12 +30,23 @@ class Encoder(nn.Module):
         self.joint_abs_action_dim=abs_action_space_dim*num_abs_agents
 
         # Define the neural network architecture, E.g.
-        self.fc1 = nn.Linear(state_space_dim, enc_hidden_dim)
-        self.fc2 = nn.Linear(enc_hidden_dim, self.joint_abs_action_dim)
+        independent_mode = True
+        if independent_mode:
+            enc_hidden_dim_per_abs_agent = enc_hidden_dim/num_abs_agents
+            self.fc1 = [nn.Linear(state_space_dim, enc_hidden_dim_per_abs_agent) for idx in range(num_abs_agents)]
+            self.fc2 = [nn.Linear(enc_hidden_dim_per_abs_agent, self.joint_abs_action_dim) for idx in range(num_abs_agents)]
+        else:
+            self.fc1 = nn.Linear(state_space_dim, enc_hidden_dim)
+            self.fc2 = nn.Linear(enc_hidden_dim, self.joint_abs_action_dim)
 
-    def forward(self, state):
-        x = F.relu(self.fc1(state))
-        logits = self.fc2(x)
+    def forward(self, state, independent_mode=True):
+        if independent_mode:
+            x = [F.relu(self.fc1[idx](state)) for idx in range(num_abs_agents)]
+            logits = [self.fc2[idx](xelem) for xlem in x]
+            logits = torch.Tensor([item for row in logits for item in row])
+        else:
+            x = F.relu(self.fc1(state))
+            logits = self.fc2(x)
         logit_array = torch.reshape(logits,(self.num_abs_agents,self.abs_action_space_dim))
         one_hot_array = get_gumbel_softmax_sample(logit_array)
         abstract_actions = torch.argmax(one_hot_array, dim=-1)
