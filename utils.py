@@ -63,7 +63,7 @@ def compare_plot(pair_of_output_filenames,output_dir='output/'):
         if dit==0:
             fig.suptitle(r"ground model: $\rho="+str(dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
     fig.tight_layout()
-    fig.savefig(f'{output_filenames[0][:-4]}_summary_fig.pdf', transparent=True,bbox_inches="tight",dpi=300)
+    fig.savefig(f'{pair_of_output_filenames[0][:-4]}_summary_fig.pdf', transparent=True,bbox_inches="tight",dpi=300)
 
 def get_corr_matrix(action_seq):
     num_agents=len(action_seq[0])
