@@ -16,18 +16,19 @@ L = 10   # abstract actions
 M = 10   # abstract agents
 N = 100  # agents
 
-assert int(N/M)==N/M, "number of abstract agents should divide ground agents for some groundmodels"
+assert int(N/M) == N / \
+    M, "number of abstract agents should divide ground agents for some groundmodels"
 
 # Ground system
 num_agents = N
 state_space_dim = K  # vector space dimensionality
-action_space_dim = 2 # number of discrete actions; fixed to 2 for simplicity
+action_space_dim = 2  # number of discrete actions; fixed to 2 for simplicity
 epsiode_length = 10
 
 # Abstracted system
 num_abs_agents = M
-abs_action_space_dim = L # number of discrete abstract actions
-#abstract action policy network parameters
+abs_action_space_dim = L  # number of discrete abstract actions
+# abstract action policy network parameters
 enc_hidden_dim = 256
 
 # Initialize environment
@@ -42,49 +43,50 @@ abstractionmodel = AbstractionModelJointPolicy(
     num_agents,
     num_abs_agents,
     action_space_dim=action_space_dim
-    )
+)
 
 # Initialize ground system model
-baseline_paras={}
-baseline_name='bitpop'
+baseline_paras = {}
+baseline_name = 'bitpop'
 if baseline_name == 'bitpop':
-    baseline_paras["corr"]=0.6
+    baseline_paras["corr"] = 0.6
     # baseline_paras['gen_type'] = 'mix'
     baseline_paras['gen_type'] = 'sum'
-agents_per_abstract_agent=int(num_agents/num_abs_agents)
+agents_per_abstract_agent = int(num_agents/num_abs_agents)
 groundmodel = GroundModelJointPolicy(
-    state_space_dim, 
-    num_abs_agents, 
-    agents_per_abstract_agent, 
-    action_space_dim=2, 
-    baseline = baseline_name, 
+    state_space_dim,
+    num_abs_agents,
+    agents_per_abstract_agent,
+    action_space_dim=2,
+    baseline=baseline_name,
     baseline_paras=baseline_paras
-    )
+)
 
 if __name__ == '__main__':
     output_path = 'output/'
     # if ~os.path.exists(output_path):
     #     os.makedirs(output_path)
 
-    #example rollout
+    # example rollout
     num_steps = 100*epsiode_length
     exploit_mode = True
-    output_filenames=[]
-    for model_name,model in zip(['groundmodel','abstractionmodel'],[groundmodel,abstractionmodel]):
+    output_filenames = []
+    for model_name, model in zip(['groundmodel', 'abstractionmodel'], [groundmodel, abstractionmodel]):
         episode_time_indices = []
         state_seq = []
         joint_action_seq = []
         print(f'seed:{seed}')
-        env.state=env.sample_initial_state(state_space_dim,seed)
+        env.state = env.sample_initial_state(state_space_dim, seed)
         for step in range(num_steps):
 
             state_seq.append(env.state.detach().cpu().numpy())
             action_probability_vectors = model.forward(env.state)
-            
-            if exploit_mode: #take greedy action
-                actions = torch.argmax(action_probability_vectors,dim=-1)
-            else: #sample
-                actions=Categorial(action_probability_vectors) #Categorical has batch functionality!
+
+            if exploit_mode:  # take greedy action
+                actions = torch.argmax(action_probability_vectors, dim=-1)
+            else:  # sample
+                # Categorical has batch functionality!
+                actions = Categorial(action_probability_vectors)
             joint_action_seq.append(actions.detach().cpu().numpy())
             env.state, episode_step = env.step(env.state, actions)
             episode_time_indices.append(episode_step)
@@ -100,14 +102,11 @@ if __name__ == '__main__':
         data["times"] = episode_time_indices
         data["states"] = state_seq
         data["actions"] = joint_action_seq
-        if model_name=='groundmodel':
-            data['baseline_paras']=baseline_paras
-        filename=f"output/rundata_{model_name}_exploit{exploit_mode}_{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
-        np.save(filename,data)
+        if model_name == 'groundmodel':
+            data['baseline_paras'] = baseline_paras
+        filename = f"output/rundata_{model_name}_exploit{exploit_mode}_{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
+        np.save(filename, data)
         output_filenames.append(filename)
 
-    #post simulation analysis
+    # post simulation analysis
     compare_plot(output_filenames)
-
-
-

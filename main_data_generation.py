@@ -8,8 +8,9 @@ import os
 from Environment import Environment
 from GroundModelJointPolicy import GroundModelJointPolicy
 
+
 def generate_system_data(sys_parameters, sim_parameters, output_path):
-	
+
 	# assign system parameters
 	K = sys_parameters['K']   # state space dimensionality
 	L = sys_parameters['L']   # abstract actions
@@ -17,10 +18,10 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
 	N = sys_parameters['N']   # agents
 	epsiode_length = sys_parameters['episode_length']
 	baseline_name = sys_parameters['baseline_name']
-	baseline_paras=sys_parameters['baseline_paras']
+	baseline_paras = sys_parameters['baseline_paras']
 	exploit_mode = sys_parameters['exploit_mode']
 
-    #assign data generation parameters
+    # assign data generation parameters
 	seedlist = range(sim_parameters['num_seeds'])
     num_steps = sim_parameters['num_episodes']*epsiode_length
 
@@ -58,7 +59,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
     model = groundmodel
 
     
-    #run rollouts
+    # run rollouts
     time_store = []
     state_store = []
     jointaction_store = []
@@ -83,7 +84,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
 	    state_store.append(state_seq)
 	    jointaction_store.append(joint_action_seq)
 
-	#add data to simulation parameter dictionary and store
+	# add data to simulation parameter dictionary and store
     sim_parameters['sys_parameters'] = sys_parameters
     sim_parameters["times"] = time_store
     sim_parameters["states"] = state_store
