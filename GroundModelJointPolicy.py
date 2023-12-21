@@ -6,7 +6,7 @@ import itertools
 
 
 class GroundModelJointPolicy(nn.Module):
-    def __init__(self, state_space_dim, num_abs_agents, agents_per_abstract_agent, action_space_dim=2, baseline='bitpop', baseline_paras=None):
+    def __init__(self, state_space_dim, num_abs_agents, agents_per_abstract_agent, action_space_dim=2, baseline_paras=None):
         super(GroundModelJointPolicy, self).__init__()
         self.num_agents = num_abs_agents*agents_per_abstract_agent
         self.state_set = np.array([np.array(l) for l in list(map(list, itertools.product(
@@ -18,8 +18,8 @@ class GroundModelJointPolicy(nn.Module):
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
         agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
-        if baseline == 'bitpop':
-
+        if baseline_paras['baseline_name'] == 'bitpop':
+            
             self.corr = baseline_paras['corr']
             gen_type = baseline_paras['gen_type']
             for abs_agent_idx in range(num_abs_agents):

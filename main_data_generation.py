@@ -52,7 +52,6 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
 	    M, 
 	    agents_per_abstract_agent, 
 	    action_space_dim=2, 
-	    baseline = baseline_name, 
 	    baseline_paras=baseline_paras
 	    )
     model_name = 'groundmodel'
@@ -91,4 +90,6 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
     sim_parameters["actions"] = jointaction_store
     filename=f"{output_path}_trainingdata_{model_name}_exploit{exploit_mode}_{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
     np.save(filename,sim_parameters)
+
+
 

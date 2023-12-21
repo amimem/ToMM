@@ -25,6 +25,16 @@ def get_linear_nonlinear_function(input_dim, output_dim):
 
     return nonlinear_function
 
+# Define the neural network architecture type, E.g.
+def create_policy_network(state_space_dim, enc_hidden_dim, output_dim):
+    fc1 = nn.Linear(state_space_dim, enc_hidden_dim)
+    fc2 = nn.Linear(enc_hidden_dim, output_dim)
+
+    def policy(state, fc1=fc1, fc2=fc2):
+        x = F.relu(fc1(state))
+        logits = fc2(x)
+        return logits
+    return policy
 
 def compare_plot(pair_of_output_filenames, output_dir='output/'):
     data_pair = [np.load(filename, allow_pickle=True).item()

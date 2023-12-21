@@ -11,10 +11,10 @@ from GroundModelJointPolicy import GroundModelJointPolicy
 from utils import compare_plot
 
 # System parameters
-K = 10   # states
+K = 10   # state space dimension
 L = 10   # abstract actions
-M = 10   # abstract agents
-N = 100  # agents
+M = 2   # abstract agents
+N = 10  # agents
 
 assert int(N/M) == N / \
     M, "number of abstract agents should divide ground agents for some groundmodels"
@@ -48,17 +48,23 @@ abstractionmodel = AbstractionModelJointPolicy(
 # Initialize ground system model
 baseline_paras = {}
 baseline_name = 'bitpop'
+# ...other baseline names here
+baseline_paras['baseline_name'] = baseline_name
+
 if baseline_name == 'bitpop':
-    baseline_paras["corr"] = 0.6
+    baseline_paras["corr"] = 0.8
+    # baseline_paras["acrosscorr"] = 0
     # baseline_paras['gen_type'] = 'mix'
     baseline_paras['gen_type'] = 'sum'
+else:
+    ...#other baselines parameters here
+
 agents_per_abstract_agent = int(num_agents/num_abs_agents)
 groundmodel = GroundModelJointPolicy(
     state_space_dim,
     num_abs_agents,
     agents_per_abstract_agent,
     action_space_dim=2,
-    baseline=baseline_name,
     baseline_paras=baseline_paras
 )
 
@@ -68,7 +74,8 @@ if __name__ == '__main__':
     #     os.makedirs(output_path)
 
     # example rollout
-    num_steps = 100*epsiode_length
+    num_episodes = 100
+    num_steps = num_episodes*epsiode_length
     exploit_mode = True
     output_filenames = []
     for model_name, model in zip(['groundmodel', 'abstractionmodel'], [groundmodel, abstractionmodel]):
