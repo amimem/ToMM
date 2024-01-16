@@ -82,12 +82,14 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
     sim_parameters["times"] = time_store
     sim_parameters["states"] = state_store
     sim_parameters["actions"] = jointaction_store
-    filename=f"{output_path}_trainingdata_{model_name}_exploit{exploit_mode}_numepi{num_episodes}_K{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
-    np.save(filename,sim_parameters)
+    filename=f"{output_path}_trainingdata_{model_name}_exploit_{exploit_mode}_numepi{num_episodes}_K{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
+
+    with open(filename, 'wb') as f:
+        np.save(f,sim_parameters)
 
 if __name__ == '__main__':
 
-    output_path = 'output/'
+    output_path = os.path.join(os.getcwd(), 'output/')
     # System parameters
     K = 10   # state space dimension
     L = 10   # abstract actions
