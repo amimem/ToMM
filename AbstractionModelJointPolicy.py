@@ -20,11 +20,11 @@ class AbstractionModelJointPolicy(nn.Module):
         abs_actions = self.abstract_jointpolicy(state)
 
         # sample assigner to get assignments
-        abstract_agent_assignments = self.assigner()
+        abstract_agent_assignments = self.assigner(state)
 
         # Pass the abstract actions ans assignments through the decoder to get action probabilities
         ground_action_probability_vectors = self.ground_jointpolicy(
-            abs_actions, abstract_agent_assignments)
+            state, abs_actions, abstract_agent_assignments)
 
         return ground_action_probability_vectors
 
@@ -48,17 +48,21 @@ class Encoder(nn.Module):
             enc_hidden_dim_per_policy = enc_hidden_dim
             output_dimension = abs_action_space_dim*num_abs_agents
             num_of_policy_realizations = 1
-        self.abstract_agent_policies = [create_policy_network(
+        self.abstract_agent_policy_networks = [create_policy_network(
             state_space_dim, enc_hidden_dim_per_policy, output_dimension) for idx in range(num_of_policy_realizations)]
 
     def abstract_agent_joint_policy(self, state, independent_mode=True):
+        # print(state.shape)
         if independent_mode:
-            abs_action_probabilities = [
-                policy(state) for policy in self.abstract_agent_policies]
-            logits = torch.cat(abs_action_probabilities)
+            list_of_abs_action_logit_vectors = [
+                policy_network(state) for policy_network in self.abstract_agent_policy_networks]
+            logit_array = torch.stack(list_of_abs_action_logit_vectors, dim=len(state.shape)-1)
         else:
-            logits = self.abstract_agent_policies[0](state)
-        logit_array = torch.reshape(logits, shape=(self.num_abs_agents, self.abs_action_space_dim))
+            logit_array = self.abstract_agent_policy_networks[0](state)
+            if len(state.shape)==2:
+                logit_array = torch.reshape(logit_array, shape=(len(state), self.num_abs_agents, self.abs_action_space_dim))
+            else:
+                logit_array = torch.reshape(logit_array, shape=(self.num_abs_agents, self.abs_action_space_dim))
         return logit_array
 
     def forward(self, state, independent_mode=True):
@@ -81,14 +85,19 @@ class Decoder(nn.Module):
         # initialize policies (input dimension is 1 (abstract action index) + embed_dim)
         state_space_dim = 1 + embedding_dim
         enc_hidden_dim = 256
-        output_dimenson = action_space_dim
+        output_dimension = action_space_dim
         self.shared_action_policy_network = create_policy_network(
-            state_space_dim, enc_hidden_dim, output_dimenson)
+            state_space_dim, enc_hidden_dim, output_dimension)
 
-    def forward(self, abs_actions, abstract_agent_assignments):
-        assigned_abstract_actions = abs_actions[abstract_agent_assignments]
-        input_tensor = torch.cat([assigned_abstract_actions[:, None], self.groundagent_embedding(
-            torch.LongTensor(range(self.num_agents)))], dim=-1)
+    def forward(self, state, abs_actions, abstract_agent_assignments):
+        assigned_abstract_actions = torch.stack([abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])],dim=0)#[:,:,0]
+        repeat_dims = (state.shape[0],1,1) if len(state.shape)==2 else (1,1)
+        # print(torch.unsqueeze(assigned_abstract_actions,-1).shape)
+        # print(torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(range(self.num_agents))),dim=0).repeat(repeat_dims).shape)
+        input_tensor = torch.cat([
+                                torch.unsqueeze(assigned_abstract_actions,dim=-1), 
+                                torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(range(self.num_agents))),dim=0).repeat(repeat_dims)
+                                ], dim=-1)
         action_probability_vectors = F.softmax(
             self.shared_action_policy_network(input_tensor), dim=-1)
         return action_probability_vectors
@@ -106,9 +115,11 @@ class Assigner(nn.Module):
         self.assigner_logit_array = self.abs_agent_assignment_embedding(
             torch.LongTensor(range(num_agents)))
 
-    def forward(self):
+    def forward(self, state):
+        repeat_dims = (state.shape[0],1,1) if len(state.shape)==2 else (1,1)
         one_hot_assignment_array = get_gumbel_softmax_sample(
-            self.assigner_logit_array)
+            self.assigner_logit_array.repeat(repeat_dims)) #samples for each member of batch
+
         abstract_agent_assignments = torch.argmax(
             one_hot_assignment_array, dim=-1)
         return abstract_agent_assignments

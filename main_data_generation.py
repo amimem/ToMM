@@ -47,7 +47,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
 	    K,
 	    M,
 	    agents_per_abstract_agent,
-	    action_space_dim=2,
+	    action_space_dim=action_space_dim,
 	    baseline_paras=baseline_paras)
     model_name = 'groundmodel'
     model = groundmodel
@@ -79,9 +79,9 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
 
     # add data to simulation parameter dictionary and store
     sim_parameters['sys_parameters'] = sys_parameters
-    sim_parameters["times"] = time_store
-    sim_parameters["states"] = state_store
-    sim_parameters["actions"] = jointaction_store
+    sim_parameters["times"] = np.array(time_store)
+    sim_parameters["states"] = np.array(state_store)
+    sim_parameters["actions"] = np.array(jointaction_store)
     filename=f"{output_path}_trainingdata_{model_name}_exploit_{exploit_mode}_numepi{num_episodes}_K{K}_L{L}_M{M}_N{N}_T{epsiode_length}.npy"
 
     with open(filename, 'wb') as f:
@@ -90,11 +90,12 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
 if __name__ == '__main__':
 
     output_path = os.path.join(os.getcwd(), 'output/')
+
     # System parameters
     K = 10   # state space dimension
     L = 10   # abstract actions
-    M = 2   # abstract agents
-    N = 10  # agents_per_abstract_agent
+    M = 2    # abstract agents
+    N = 10   # agents
 
     # ground system paras
     baseline_paras = {}
@@ -103,7 +104,7 @@ if __name__ == '__main__':
     baseline_paras['gen_type'] = 'sum'
 
     # sim parameters
-    num_episodes = 100
+    num_episodes = 10000
     exploit_mode = True
     epsiode_length = 10
     num_seeds = 1
