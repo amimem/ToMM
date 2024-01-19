@@ -37,18 +37,19 @@ def create_policy_network(state_space_dim, enc_hidden_dim, output_dim):
         return logits
     return policy
 
-class JointPolicyNet(nn.Module):  
-    def __init__(self, n_input, n_hidden, n_out, n_channels, n_hidden_layers):
+class JointPolicyNet(nn.Module):
+    def __init__(self, input_size, hidden_layer_width, output_size, n_channels, n_hidden_layers):
         super(JointPolicyNet, self).__init__()
-        assert (n_out/n_channels).is_integer(), "number of outputs/number of channels should be integer-valued"
-        assert (n_hidden/n_channels).is_integer(), f"hidden layer width{n_hidden}/number of channels{n_channels} should be integer-valued"
-        n_hidden = int(n_hidden/n_channels)
+        # assert (output_size/n_channels).is_integer(), f"number of outputs{n_out}/number of channels{n_channels} should be integer-valued"
+        # output_size = int(output_size/n_channels)
+        assert (hidden_layer_width/n_channels).is_integer(), f"hidden layer width{hidden_layer_width}/number of channels{n_channels} should be integer-valued"
+        hidden_layer_width = int(hidden_layer_width/n_channels)
 
         self.module_array = nn.ModuleList(
             nn.ModuleList(
-                [nn.Linear(n_input, n_hidden)] +
-                [nn.Linear(n_hidden, n_hidden) for h_layer_idx in range(n_hidden_layers)] +
-                [nn.Linear(n_hidden, n_out)]
+                [nn.Linear(input_size, hidden_layer_width)] +
+                [nn.Linear(hidden_layer_width, hidden_layer_width) for h_layer_idx in range(n_hidden_layers)] +
+                [nn.Linear(hidden_layer_width, output_size)]
             ) for channel_idx in range(n_channels))
 
         self.n_channels = n_channels
@@ -62,9 +63,9 @@ class JointPolicyNet(nn.Module):
                 x = torch.relu(self.module_array[channel_idx][layer_idx+1](x))
             logit_vectors.append(x)
         if self.n_channels > 1:
-            output = torch.stack(logit_vectors, dim=1 if len(state.shape) == 2 else 0)
+            output = torch.stack(logit_vectors, dim=1) if len(state.shape) == 2 else torch.cat(logit_vectors)
         else:
-            output = logit_vectors[0]
+            output = torch.reshape(logit_vectors[0], dim=(output_size/2,2)) #hard coded! return to this to make general
         return output #dims with batches: (batch_size,num_agents,num_actions); dims without batches: (num_agents,num_actions)
 
 def compare_plot(pair_of_output_filenames, output_dir='output/'):

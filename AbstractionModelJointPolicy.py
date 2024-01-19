@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from utils import get_gumbel_softmax_sample, get_linear_nonlinear_function, JointPolicyNet
+from utils import get_gumbel_softmax_sample, JointPolicyNet
 
 
 class AbstractionModelJointPolicy(nn.Module):
