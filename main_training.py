@@ -62,7 +62,7 @@ if __name__ == '__main__':
         num_abs_agents = data['sys_parameters']['M']
         abs_action_space_dim = data['sys_parameters']['L']  # number of discrete abstract actions
         # abstract action policy network parameters
-        enc_hidden_dim = 256
+        enc_hidden_dim = 64*num_abs_agents
         
         # Initialize abstraction system model
         net = AbstractionModelJointPolicy(
@@ -76,8 +76,8 @@ if __name__ == '__main__':
     elif model_name =='singletask_baseline':
         n_hidden_layers = 2
         n_channels = num_agents
-        hidden_dim = 256/num_agents
-        assert (hidden_dim).isinteger(), "num of agents should divide hidden dimensions"
+        hidden_dim = 256
+        assert (hidden_dim/num_agents).isinteger(), "num of agents should divide hidden dimensions"
         n_out = 2
         net = JointPolicyNet(state_space_dim, hidden_dim, abs_action_space_dim, n_channels, n_hidden_layers)
     elif model_name =='multitask_baseline':

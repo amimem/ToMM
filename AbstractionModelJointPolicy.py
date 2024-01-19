@@ -40,7 +40,7 @@ class Encoder(nn.Module):
 
         # realize the architecture
         n_hidden_layers = 2
-        n_channels = abs_action_space_dim
+        n_channels = num_abs_agents
         self.abstractagent_policy_networks = JointPolicyNet(state_space_dim, enc_hidden_dim, abs_action_space_dim, n_channels, n_hidden_layers)
 
     def forward(self, state):#, independent_mode=True):
@@ -68,7 +68,7 @@ class Decoder(nn.Module):
 
     def forward(self, state, abs_actions, abstract_agent_assignments):
         #map abstract actions to respective agents based on assignments and then concatenate with respective ground agent embedding vector
-        assigned_abstract_actions = torch.stack([abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])],dim=0)#[:,:,0]
+        assigned_abstract_actions = torch.stack([abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])],dim=0)
         repeat_dims = (state.shape[0],1,1) if len(state.shape)==2 else (1,1)
         input_tensor = torch.cat([
                                 torch.unsqueeze(assigned_abstract_actions,dim=-1), 

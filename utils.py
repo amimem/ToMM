@@ -41,14 +41,18 @@ class JointPolicyNet(nn.Module):
     def __init__(self, n_input, n_hidden, n_out, n_channels, n_hidden_layers):
         super(JointPolicyNet, self).__init__()
         assert (n_out/n_channels).is_integer(), "number of outputs/number of channels should be integer-valued"
-        self.n_channels = n_channels
-        self.n_hidden_layers = n_hidden_layers
+        assert (n_hidden/n_channels).is_integer(), f"hidden layer width{n_hidden}/number of channels{n_channels} should be integer-valued"
+        n_hidden = int(n_hidden/n_channels)
+
         self.module_array = nn.ModuleList(
             nn.ModuleList(
                 [nn.Linear(n_input, n_hidden)] +
                 [nn.Linear(n_hidden, n_hidden) for h_layer_idx in range(n_hidden_layers)] +
                 [nn.Linear(n_hidden, n_out)]
             ) for channel_idx in range(n_channels))
+
+        self.n_channels = n_channels
+        self.n_hidden_layers = n_hidden_layers
        
     def forward(self, state):
         logit_vectors = []
