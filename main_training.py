@@ -11,11 +11,25 @@ from AbstractionModelJointPolicy import AbstractionModelJointPolicy
 from utils import JointPolicyNet
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
+import argparse
+
+parser = argparse.ArgumentParser(description='Training parameters')
+parser.add_argument('--model_name', type=str, default='abstraction_system', help='Name of the model')
+parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
+parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
+parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+parser.add_argument('--outdir', type=str, default='output/', help='Output directory')
+parser.add_argument('--data_filename', type=str, default='_trainingdata_groundmodel_exploit_True_numepi10000_K10_L10_M2_N10_T10.npy', help='Data filename')
+parser.add_argument('--seed', type=int, default=0, help='Random seed')
+
+args = parser.parse_args()
+
+import argparse
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device", flush=True)
 
-seed: int = 0
+seed: int = args.seed
 torch.manual_seed(seed)
 np.random.seed(seed)
 random.seed(seed)
@@ -35,15 +49,15 @@ class CustomDataset(Dataset):
 if __name__ == '__main__':
 
     #model and training setting
-    model_name = 'abstraction_system'
-    epochs = 10
-    learning_rate = 1e-3
-    batch_size = 16
+    model_name = args.model_name
+    epochs = args.epochs
+    learning_rate = args.learning_rate
+    batch_size = args.batch_size
+
 
     # load the data in the output folder
-    # outdir = "/Users/ens/repos/marl/output/"
-    outdir = "output/"
-    data_filename = "_trainingdata_groundmodel_exploit_True_numepi10000_K10_L10_M2_N10_T10.npy"
+    outdir = args.outdir
+    data_filename = args.data_filename
     data = np.load(outdir + data_filename, allow_pickle=True).item()
 
     states = data["states"][0]
