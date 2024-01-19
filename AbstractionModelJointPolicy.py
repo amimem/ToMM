@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from utils import get_gumbel_softmax_sample, get_linear_nonlinear_function, create_policy_network
+from utils import get_gumbel_softmax_sample, get_linear_nonlinear_function, JointPolicyNet
 
 
 class AbstractionModelJointPolicy(nn.Module):
@@ -9,24 +9,24 @@ class AbstractionModelJointPolicy(nn.Module):
         super(AbstractionModelJointPolicy, self).__init__()
 
         # Define the encoder, decoder, and assigner
-        self.abstract_jointpolicy = Encoder(
+        self.sample_from_abstractjointpolicy = Encoder(
             state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
-        self.ground_jointpolicy = Decoder(
+        self.groundjointpolicy = Decoder(
             num_abs_agents, num_agents, abs_action_space_dim, action_space_dim)
         self.assigner = Assigner(num_abs_agents, num_agents)
 
     def forward(self, state):
         # Pass the state through the encoder to get abstract actions
-        abs_actions = self.abstract_jointpolicy(state)
+        abs_actions = self.sample_from_abstractjointpolicy(state)
 
         # sample assigner to get assignments
         abstract_agent_assignments = self.assigner(state)
 
         # Pass the abstract actions ans assignments through the decoder to get action probabilities
-        ground_action_probability_vectors = self.ground_jointpolicy(
+        ground_action_logit_vectors = self.groundjointpolicy(
             state, abs_actions, abstract_agent_assignments)
 
-        return ground_action_probability_vectors
+        return ground_action_logit_vectors
 
 
 class Encoder(nn.Module):
@@ -39,38 +39,15 @@ class Encoder(nn.Module):
         self.joint_abs_action_dim = abs_action_space_dim*num_abs_agents
 
         # realize the architecture
-        independent_mode = True
-        if independent_mode:
-            enc_hidden_dim_per_policy = int(enc_hidden_dim/num_abs_agents)
-            output_dimension = abs_action_space_dim
-            num_of_policy_realizations = num_abs_agents
-        else:
-            enc_hidden_dim_per_policy = enc_hidden_dim
-            output_dimension = abs_action_space_dim*num_abs_agents
-            num_of_policy_realizations = 1
-        self.abstract_agent_policy_networks = [create_policy_network(
-            state_space_dim, enc_hidden_dim_per_policy, output_dimension) for idx in range(num_of_policy_realizations)]
+        n_hidden_layers = 2
+        n_channels = abs_action_space_dim
+        self.abstractagent_policy_networks = JointPolicyNet(state_space_dim, enc_hidden_dim, abs_action_space_dim, n_channels, n_hidden_layers)
 
-    def abstract_agent_joint_policy(self, state, independent_mode=True):
-        # print(state.shape)
-        if independent_mode:
-            list_of_abs_action_logit_vectors = [
-                policy_network(state) for policy_network in self.abstract_agent_policy_networks]
-            logit_array = torch.stack(list_of_abs_action_logit_vectors, dim=len(state.shape)-1)
-        else:
-            logit_array = self.abstract_agent_policy_networks[0](state)
-            if len(state.shape)==2:
-                logit_array = torch.reshape(logit_array, shape=(len(state), self.num_abs_agents, self.abs_action_space_dim))
-            else:
-                logit_array = torch.reshape(logit_array, shape=(self.num_abs_agents, self.abs_action_space_dim))
-        return logit_array
-
-    def forward(self, state, independent_mode=True):
-        logit_array = self.abstract_agent_joint_policy(state, independent_mode=independent_mode)
-        one_hot_array = get_gumbel_softmax_sample(logit_array)
-        abstract_actions = torch.argmax(one_hot_array, dim=-1)
+    def forward(self, state):#, independent_mode=True):
+        logit_vectors = self.abstractagent_policy_networks(state)
+        one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
+        abstract_actions = torch.argmax(one_hot_vectors, dim=-1) #convert from sparse (onehot) to dense (index) representation
         return abstract_actions
-
 
 class Decoder(nn.Module):
     def __init__(self, num_abs_agents, num_agents, abs_action_space_dim, action_space_dim=2):
@@ -85,22 +62,20 @@ class Decoder(nn.Module):
         # initialize policies (input dimension is 1 (abstract action index) + embed_dim)
         state_space_dim = 1 + embedding_dim
         enc_hidden_dim = 256
-        output_dimension = action_space_dim
-        self.shared_action_policy_network = create_policy_network(
-            state_space_dim, enc_hidden_dim, output_dimension)
+        n_hidden_layers = 2
+        n_channels = 1
+        self.shared_groundagent_policy_network = JointPolicyNet(state_space_dim, enc_hidden_dim, action_space_dim, n_channels, n_hidden_layers)
 
     def forward(self, state, abs_actions, abstract_agent_assignments):
+        #map abstract actions to respective agents based on assignments and then concatenate with respective ground agent embedding vector
         assigned_abstract_actions = torch.stack([abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])],dim=0)#[:,:,0]
         repeat_dims = (state.shape[0],1,1) if len(state.shape)==2 else (1,1)
-        # print(torch.unsqueeze(assigned_abstract_actions,-1).shape)
-        # print(torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(range(self.num_agents))),dim=0).repeat(repeat_dims).shape)
         input_tensor = torch.cat([
                                 torch.unsqueeze(assigned_abstract_actions,dim=-1), 
                                 torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(range(self.num_agents))),dim=0).repeat(repeat_dims)
                                 ], dim=-1)
-        action_probability_vectors = F.softmax(
-            self.shared_action_policy_network(input_tensor), dim=-1)
-        return action_probability_vectors
+        action_logit_vectors = self.shared_groundagent_policy_network(input_tensor)
+        return action_logit_vectors
 
 
 class Assigner(nn.Module):
