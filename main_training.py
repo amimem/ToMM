@@ -93,13 +93,13 @@ if __name__ == '__main__':
         hidden_dim = 256
         assert (hidden_dim/num_agents).isinteger(), "num of agents should divide hidden dimensions"
         n_out = 2
-        net = JointPolicyNet(state_space_dim, hidden_dim, abs_action_space_dim, n_channels, n_hidden_layers)
+        net = JointPolicyNet(state_space_dim, hidden_dim, n_out, n_channels, n_hidden_layers)
     elif model_name =='multitask_baseline':
         n_hidden_layers = 2
         n_channels = 1
         hidden_dim = 256
         n_out = 2
-        net = JointPolicyNet(state_space_dim, hidden_dim, abs_action_space_dim, n_channels, n_hidden_layers)
+        net = JointPolicyNet(state_space_dim, hidden_dim, n_out, n_channels, n_hidden_layers)
     else:
         print('choose valid model')
     net.to(device)
