@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from utils import get_gumbel_softmax_sample, JointPolicyNet
+from utils import get_gumbel_softmax_sample, MultiChannelNet
 
 
 class AbstractionModelJointPolicy(nn.Module):
@@ -19,7 +19,7 @@ class AbstractionModelJointPolicy(nn.Module):
         # Pass the state through the encoder to get abstract actions
         abs_actions = self.sample_from_abstractjointpolicy(state)
 
-        # sample assigner to get assignments
+        # call assigner to sample assignments
         abstract_agent_assignments = self.assigner(state)
 
         # Pass the abstract actions ans assignments through the decoder to get action probabilities
@@ -30,27 +30,33 @@ class AbstractionModelJointPolicy(nn.Module):
 
 
 class Encoder(nn.Module):
+    # a multiagent network for abstract agents
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents):
         super(Encoder, self).__init__()
         self.state_space_dim = state_space_dim
         self.abs_action_space_dim = abs_action_space_dim
         self.hidden_dim = enc_hidden_dim
         self.num_abs_agents = num_abs_agents
-        self.joint_abs_action_dim = abs_action_space_dim*num_abs_agents
 
         # realize the architecture
-        n_hidden_layers = 2
-        n_channels = num_abs_agents
-        self.abstractagent_policy_networks = JointPolicyNet(state_space_dim, enc_hidden_dim, abs_action_space_dim, n_channels, n_hidden_layers)
+        self.abstractagent_policy_networks = MultiChannelNet(
+            n_channels=num_abs_agents,
+            input_size=state_space_dim,
+            hidden_layer_width=enc_hidden_dim,
+            output_size=abs_action_space_dim
+        )
 
-    def forward(self, state):#, independent_mode=True):
+    def forward(self, state):  # , independent_mode=True):
         logit_vectors = self.abstractagent_policy_networks(state)
         one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
-        abstract_actions = torch.argmax(one_hot_vectors, dim=-1) #convert from sparse (onehot) to dense (index) representation
+        # convert from sparse (onehot) to dense (index) representation
+        abstract_actions = torch.argmax(one_hot_vectors, dim=-1)
         return abstract_actions
 
+
 class Decoder(nn.Module):
-    def __init__(self, num_abs_agents, num_agents, abs_action_space_dim, action_space_dim=2):
+    # a single agent network that conditions on the ground agent index
+    def __init__(self, num_abs_agents, num_agents, abs_action_space_dim, action_space_dim=2, hidden_layer_width=256):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
@@ -61,24 +67,32 @@ class Decoder(nn.Module):
 
         # initialize policies (input dimension is 1 (abstract action index) + embed_dim)
         state_space_dim = 1 + embedding_dim
-        enc_hidden_dim = 256
         n_hidden_layers = 2
-        n_channels = 1
-        self.shared_groundagent_policy_network = JointPolicyNet(state_space_dim, enc_hidden_dim, action_space_dim, n_channels, n_hidden_layers)
+        self.shared_groundagent_policy_network = MultiChannelNet(
+            n_channels=1,
+            input_size=state_space_dim,
+            hidden_layer_width=hidden_layer_width,
+            output_size=action_space_dim
+        )
 
     def forward(self, state, abs_actions, abstract_agent_assignments):
-        #map abstract actions to respective agents based on assignments and then concatenate with respective ground agent embedding vector
-        assigned_abstract_actions = torch.stack([abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])],dim=0)
-        repeat_dims = (state.shape[0],1,1) if len(state.shape)==2 else (1,1)
-        input_tensor = torch.cat([
-                                torch.unsqueeze(assigned_abstract_actions,dim=-1), 
-                                torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(range(self.num_agents))),dim=0).repeat(repeat_dims)
-                                ], dim=-1)
-        action_logit_vectors = self.shared_groundagent_policy_network(input_tensor)
+        # map abstract actions to respective agents based on assignments and then concatenate with respective ground agent embedding vector
+        assigned_abstract_actions = torch.stack(
+            [abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])], dim=0)
+        repeat_dims = (state.shape[0], 1, 1) if len(
+            state.shape) == 2 else (1, 1)
+        parallel_input = torch.cat([
+            torch.unsqueeze(assigned_abstract_actions, dim=-1),
+            torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(
+                range(self.num_agents))), dim=0).repeat(repeat_dims)
+        ], dim=-1)
+        action_logit_vectors = self.shared_groundagent_policy_network(
+            parallel_input)
         return action_logit_vectors
 
 
 class Assigner(nn.Module):
+    # assigns ground agents to abstract agents
     def __init__(self, num_abs_agents, num_agents):
         super(Assigner, self).__init__()
         # components are abstract agent weights
@@ -91,9 +105,10 @@ class Assigner(nn.Module):
             torch.LongTensor(range(num_agents)))
 
     def forward(self, state):
-        repeat_dims = (state.shape[0],1,1) if len(state.shape)==2 else (1,1)
+        repeat_dims = (state.shape[0], 1, 1) if len(
+            state.shape) == 2 else (1, 1)
         one_hot_assignment_array = get_gumbel_softmax_sample(
-            self.assigner_logit_array.repeat(repeat_dims)) #samples for each member of batch
+            self.assigner_logit_array.repeat(repeat_dims))  # samples for each member of batch
 
         abstract_agent_assignments = torch.argmax(
             one_hot_assignment_array, dim=-1)

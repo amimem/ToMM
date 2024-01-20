@@ -26,35 +26,20 @@ def get_linear_nonlinear_function(input_dim, output_dim):
 
     return nonlinear_function
 
-# Define the neural network architecture type, E.g.
-def create_policy_network(state_space_dim, enc_hidden_dim, output_dim):
-    fc1 = nn.Linear(state_space_dim, enc_hidden_dim)
-    fc2 = nn.Linear(enc_hidden_dim, output_dim)
-
-    def policy(state, fc1=fc1, fc2=fc2):
-        x = F.relu(fc1(state))
-        logits = fc2(x)
-        return logits
-    return policy
-
-class JointPolicyNet(nn.Module):
-    def __init__(self, input_size, hidden_layer_width, output_size, n_channels, n_hidden_layers):
-        super(JointPolicyNet, self).__init__()
-        # assert (output_size/n_channels).is_integer(), f"number of outputs{n_out}/number of channels{n_channels} should be integer-valued"
-        # output_size = int(output_size/n_channels)
-        assert (hidden_layer_width/n_channels).is_integer(), f"hidden layer width{hidden_layer_width}/number of channels{n_channels} should be integer-valued"
-        hidden_layer_width = int(hidden_layer_width/n_channels)
-
+class MultiChannelNet(nn.Module):
+    # implements a 2D module array
+    def __init__(self, n_channels=1, input_size=10, hidden_layer_width=256, n_hidden_layers=2, output_size=10, output_dim=None):
+        super(MultiChannelNet, self).__init__()
         self.module_array = nn.ModuleList(
             nn.ModuleList(
                 [nn.Linear(input_size, hidden_layer_width)] +
                 [nn.Linear(hidden_layer_width, hidden_layer_width) for h_layer_idx in range(n_hidden_layers)] +
                 [nn.Linear(hidden_layer_width, output_size)]
             ) for channel_idx in range(n_channels))
-
         self.n_channels = n_channels
         self.n_hidden_layers = n_hidden_layers
-       
+        self.output_dim = output_dim
+
     def forward(self, state):
         logit_vectors = []
         for channel_idx in range(self.n_channels):
@@ -62,11 +47,16 @@ class JointPolicyNet(nn.Module):
             for layer_idx in range(self.n_hidden_layers+1):
                 x = torch.relu(self.module_array[channel_idx][layer_idx+1](x))
             logit_vectors.append(x)
-        if self.n_channels > 1:
-            output = torch.stack(logit_vectors, dim=1) if len(state.shape) == 2 else torch.cat(logit_vectors)
-        else:
-            output = torch.reshape(logit_vectors[0], dim=(output_size/2,2)) #hard coded! return to this to make general
-        return output #dims with batches: (batch_size,num_agents,num_actions); dims without batches: (num_agents,num_actions)
+        if self.n_channels > 1: # assumes wants output_dim=(n_channels,output_size)
+            output = torch.stack(logit_vectors, dim=1) if len(
+                state.shape) == 2 else torch.cat(logit_vectors)
+        elif self.n_channels == 1:
+            output = logit_vectors[0]
+            if self.output_dim is not None:
+                output = output.reshape(output.shape[:-1] + self.output_dim)
+        # dims with batches: (batch_size,num_agents,num_actions); dims without batches: (num_agents,num_actions)
+        return output
+
 
 def compare_plot(pair_of_output_filenames, output_dir='output/'):
     data_pair = [np.load(filename, allow_pickle=True).item()
@@ -113,6 +103,7 @@ def compare_plot(pair_of_output_filenames, output_dir='output/'):
                 dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
     fig.tight_layout()
     fig.savefig(f'{pair_of_output_filenames[0][:-4]}_summary_fig.pdf', transparent=True, bbox_inches="tight", dpi=300)
+
 
 def get_corr_matrix(action_seq):
     num_agents = len(action_seq[0])
