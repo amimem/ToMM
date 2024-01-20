@@ -75,8 +75,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
     sim_parameters["times"] = np.array(time_store)
     sim_parameters["states"] = np.array(state_store)
     sim_parameters["actions"] = np.array(jointaction_store)
-    filename = f"{output_path}_trainingdata_{groundmodel_name}_exploit_{exploit_mode}\
-        _numepi{num_episodes}_K{state_space_dim}_M{num_agent_groups}_N{num_agents}_T{epsiode_length}.npy"
+    filename = f"{output_path}_trainingdata_{groundmodel_name}_exploit_{exploit_mode}_numepi{num_episodes}_K{state_space_dim}_M{num_agent_groups}_N{num_agents}_T{epsiode_length}.npy"
 
     with open(filename, 'wb') as f:
         np.save(f, sim_parameters)

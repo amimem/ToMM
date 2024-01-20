@@ -49,52 +49,59 @@ class MultiChannelNet(nn.Module):
         return output
 
 
-def compare_plot(pair_of_output_filenames, output_dir='output/'):
-    data_pair = [np.load(filename, allow_pickle=True).item()
-                 for filename in pair_of_output_filenames]
-    fig, ax = pl.subplots(2, 3)
-
-    for dit, dataset in enumerate(data_pair):
-        actions = np.array(dataset["actions"])
-        states = np.array(dataset["states"])
+def compare_plot(output_filenames):
+    num_datasets = len(output_filenames)
+    data_list = [np.load(filename, allow_pickle=True).item()
+                 for filename in output_filenames]
+    fig, ax = pl.subplots(num_datasets, 3,figsize=(9,num_datasets*3))
+    seed_idx = 0
+    for dit, dataset in enumerate(data_list):
+        actions = dataset["actions"][seed_idx]
+        states = dataset["states"][seed_idx]
+        first = (dit,0) if num_datasets>1 else 0
+        second = (dit,1) if num_datasets>1 else 1
+        third = (dit,2) if num_datasets>1 else 2
         num_agents = len(actions[0])
-        ax[dit, 0].imshow(actions.T, extent=[
+        ax[first].imshow(actions.T, extent=[
                           0, actions.shape[0], 0, actions.shape[1]], aspect='auto')
         # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
         # ax[dit,0].axvline(epsiode_change_time)
-        ax[dit, 0].set_ylabel(dataset['model_name']+'\n\nagent index')
-        if dit == 1:
-            ax[dit, 0].set_xlabel('time index')
+        ax[first].set_ylabel(dataset['sys_parameters']['jointagent_groundmodel_paras']['groundmodel_name']+'\n\nagent index')
+        if dit == len(data_list)-1:
+            ax[first].set_xlabel('time index')
         else:
-            ax[dit, 0].set_title('actions')
+            ax[first].set_title('actions')
 
-        ax[dit, 1].plot(np.linalg.norm(states, axis=1), '.')
+        ax[second].plot(np.linalg.norm(states, axis=1), '.')
         # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
         # ax[dit,1].axvline(epsiode_change_time)
-        if dit == 1:
-            ax[dit, 1].set_xlabel('time index')
+        if dit == len(data_list)-1:
+            ax[second].set_xlabel('time index')
         else:
-            ax[dit, 1].set_title('state norm')
+            ax[second].set_title('state norm')
 
-        corr_matrix = get_corr_matrix(dataset["actions"])
-        ax[dit, 2].imshow(corr_matrix, extent=[
-                          0.5, num_agents+0.5, 0.5, num_agents+0.5])
-        ax[dit, 2].set_xticks([1]+list(ax[dit, 2].get_xticks()))
-        ax[dit, 2].set_yticks([1]+list(ax[dit, 2].get_yticks()))
-        ax[dit, 2].set_xlim(0.5, num_agents+0.5)
-        ax[dit, 2].set_ylim(0.5, num_agents+0.5)
-        ax[dit, 2].set_ylabel('agent index')
+        corr_matrix = get_corr_matrix(actions)
+        shift=-0.5
+        p=ax[third].imshow(corr_matrix, extent=[
+                          shift, num_agents+shift, shift, num_agents+shift])
+        ax[third].set_xticks(range(num_agents))
+        ax[third].set_yticks(range(num_agents))
+        ax[third].set_xlim(shift, num_agents+shift)
+        ax[third].set_ylim(shift, num_agents+shift)
+        ax[third].set_ylabel('agent index')
         if dit == 1:
-            ax[dit, 2].set_xlabel('agent index')
-
+            ax[third].set_xlabel('agent index')
         if dit == 0:
-            ax[dit, 2].set_title('action correlations')
-        if dit == 0:
-            fig.suptitle(r"ground model: $\rho="+str(
-                dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
+            ax[third].set_title('action correlations')
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(ax[third])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(p, cax=cax, orientation='vertical')
+        # if dit == 0:
+        #     fig.suptitle(r"ground model: $\rho="+str(
+        #         dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
     fig.tight_layout()
-    fig.savefig(f'{pair_of_output_filenames[0][:-4]}_summary_fig.pdf', transparent=True, bbox_inches="tight", dpi=300)
-
+    return fig
 
 def get_corr_matrix(action_seq):
     num_agents = len(action_seq[0])
