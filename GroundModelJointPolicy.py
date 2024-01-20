@@ -6,7 +6,7 @@ import itertools
 
 
 class GroundModelJointPolicy(nn.Module):
-    def __init__(self, state_space_dim, num_abs_agents, agents_per_abstract_agent, action_space_dim=2, baseline_paras=None):
+    def __init__(self, state_space_dim, num_abs_agents, agents_per_abstract_agent, action_space_dim=2, model_paras=None):
         super(GroundModelJointPolicy, self).__init__()
         self.num_agents = num_abs_agents*agents_per_abstract_agent
         self.state_set = np.array([np.array(l) for l in list(map(list, itertools.product(
@@ -18,10 +18,10 @@ class GroundModelJointPolicy(nn.Module):
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
         agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
-        if baseline_paras['baseline_name'] == 'bitpop':
-            
-            self.corr = baseline_paras['corr']
-            gen_type = baseline_paras['gen_type']
+        if model_paras['groundmodel_name'] == 'bitpop':
+
+            self.corr = model_paras['corr']
+            gen_type = model_paras['gen_type']
             for abs_agent_idx in range(num_abs_agents):
                 agent_indices = range(abs_agent_idx * agents_per_abstract_agent,
                                       (abs_agent_idx + 1) * agents_per_abstract_agent)
@@ -45,7 +45,7 @@ class GroundModelJointPolicy(nn.Module):
                     print("choose sum or mix")
                 agent_indices_bool[agent_indices] = False
         else:
-            print('use a defined baseline')
+            print('use a defined groundmodel')
 
     def forward(self, state):
         state_idx = self.get_state_idx(state.detach().cpu().numpy())

@@ -16,18 +16,8 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
     return y_hard_diff
 
 
-def get_linear_nonlinear_function(input_dim, output_dim):
-    # Create a linear layer
-    linear_layer = nn.Linear(input_dim, output_dim)
-
-    # Define the function to be returned
-    def nonlinear_function(input_tensor):
-        return F.sigmoid(linear_layer(input_tensor))
-
-    return nonlinear_function
-
 class MultiChannelNet(nn.Module):
-    # implements a 2D module array
+    # implements a 2D module array architecture. Parameters refer to architecture of individual channels
     def __init__(self, n_channels=1, input_size=10, hidden_layer_width=256, n_hidden_layers=2, output_size=10, output_dim=None):
         super(MultiChannelNet, self).__init__()
         self.module_array = nn.ModuleList(
@@ -47,7 +37,8 @@ class MultiChannelNet(nn.Module):
             for layer_idx in range(self.n_hidden_layers+1):
                 x = torch.relu(self.module_array[channel_idx][layer_idx+1](x))
             logit_vectors.append(x)
-        if self.n_channels > 1: # assumes wants output_dim=(n_channels,output_size)
+        # assumes wants output_dim=(n_channels,output_size)
+        if self.n_channels > 1:
             output = torch.stack(logit_vectors, dim=1) if len(
                 state.shape) == 2 else torch.cat(logit_vectors)
         elif self.n_channels == 1:

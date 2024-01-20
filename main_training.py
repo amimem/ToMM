@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    default='abstraction_system', help='Name of the model')
+                    default='STOMMnet_2_10', help='Name of the model')
 parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
                     default=1e-3, help='Learning rate')
@@ -24,7 +24,7 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_filename', type=str,
-                    default='_trainingdata_groundmodel_exploit_True_numepi10000_K10_L10_M2_N10_T10.npy', help='Data filename')
+                    default='_trainingdata_bitpop_exploit_True_numepi10000_K10_M2_N10_T10.npy', help='Data filename')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 
 args = parser.parse_args()
@@ -77,9 +77,9 @@ if __name__ == '__main__':
 
     # instantiate model
     hidden_capacity = 250
-    if model_name == 'abstraction_system':
-        num_abs_agents = data['sys_parameters']['M']
-        abs_action_space_dim = data['sys_parameters']['L']
+    if model_name.split('_')[0] == 'STOMMnet':
+        num_abs_agents = int(model_name.split('_')[1]) # for bitpop, could match data['sys_parameters']['jointagent_groundmodel_paras']['M']
+        abs_action_space_dim = int(model_name.split('_')[2])
         assert (hidden_capacity/num_abs_agents).is_integer(
         ), "num of abstract agents should divide hidden dimensions"
         enc_hidden_dim = int(hidden_capacity/num_abs_agents)
@@ -134,4 +134,4 @@ if __name__ == '__main__':
         logging_loss.append(running_loss/len(train_loader))
     np.save(outdir + data_filename[:-4] + "_loggedloss.npy", logging_loss)
     torch.save(net.state_dict(), outdir +
-               data_filename[:-4] + "_trainedmodel.pt")
+               data_filename[:-4] + "_" + model_name +".pt")

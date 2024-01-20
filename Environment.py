@@ -1,9 +1,8 @@
+import random
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import random
-
-from utils import get_linear_nonlinear_function
+from torch.nn import functional as F
 
 
 class Environment(nn.Module):
@@ -20,7 +19,9 @@ class Environment(nn.Module):
         self.state = self.sample_initial_state(state_space_dim, self.seed)
 
         # Create a linear layer
-        self.linear_layer = nn.Linear(state_space_dim + num_agents, state_space_dim)
+        self.linear_layer = nn.Linear(
+            state_space_dim + num_agents, state_space_dim)
+        nn.init.normal_(self.linear_layer.weight,std=1/np.sqrt(state_space_dim + num_agents))
 
     def forward(self, state, actions):
         # Apply the transition function to the state and actions
