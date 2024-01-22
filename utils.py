@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import matplotlib.pyplot as pl
 import numpy as np
-
+import seaborn as sb
 
 def get_gumbel_softmax_sample(logit_vector, tau=1):
     # Compute Gumbel softmax sample for both hard and soft cases
@@ -17,7 +17,8 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
 
 
 class MultiChannelNet(nn.Module):
-    # implements a 2D module array architecture. Parameters refer to architecture of individual channels
+    # implements a 2D module array architecture. Parameters refer to architecture of individual channels.
+    # output of dimension: (n_channels,output_size), unless specified using input argument output_dim
     def __init__(self, n_channels=1, input_size=10, hidden_layer_width=256, n_hidden_layers=2, output_size=10, output_dim=None):
         super(MultiChannelNet, self).__init__()
         self.module_array = nn.ModuleList(
@@ -28,24 +29,22 @@ class MultiChannelNet(nn.Module):
             ) for channel_idx in range(n_channels))
         self.n_channels = n_channels
         self.n_hidden_layers = n_hidden_layers
-        self.output_dim = output_dim
-
+        self.default_output_dim = (n_channels, output_size)
+        self.output_dim = self.default_output_dim if output_dim is None else output_dim
+                
     def forward(self, state):
         logit_vectors = []
         for channel_idx in range(self.n_channels):
             x = torch.relu(self.module_array[channel_idx][0](state))
             for layer_idx in range(self.n_hidden_layers+1):
                 x = torch.relu(self.module_array[channel_idx][layer_idx+1](x))
-            logit_vectors.append(x)
-        # assumes wants output_dim=(n_channels,output_size)
-        if self.n_channels > 1:
-            output = torch.stack(logit_vectors, dim=1) if len(
-                state.shape) == 2 else torch.cat(logit_vectors)
-        elif self.n_channels == 1:
-            output = logit_vectors[0]
-            if self.output_dim is not None:
-                output = output.reshape(output.shape[:-1] + self.output_dim)
-        # dims with batches: (batch_size,num_agents,num_actions); dims without batches: (num_agents,num_actions)
+            logit_vectors.append(x) 
+        if len(state.shape) >= 2:
+            output = torch.stack(logit_vectors, dim=-2)
+        else:
+            torch.cat(logit_vectors)
+        if len(self.output_dim) != len(self.default_output_dim):
+            output = output.reshape(tuple(output.shape[:-2]) + tuple(self.output_dim))
         return output
 
 
@@ -71,10 +70,14 @@ def compare_plot(output_filenames):
             ax[first].set_xlabel('time index')
         else:
             ax[first].set_title('actions')
-
-        ax[second].plot(np.linalg.norm(states, axis=1), '.')
-        # for epsiode_change_time in np.where(np.array(dataset["times"])==dataset["T"])[0]:
-        # ax[dit,1].axvline(epsiode_change_time)
+            
+        # ax[second].plot(np.linalg.norm(states, axis=1), '.')
+        datatmp = np.linalg.norm(np.diff(states,axis=0), axis=1)
+        epsiode_length = 20
+        for start_idx,col in enumerate(sb.color_palette('viridis',epsiode_length)):#episode length
+            x=datatmp[1+start_idx::epsiode_length]
+            y=datatmp[start_idx:-2:epsiode_length]
+            ax[second].plot(x[:len(y)],y, '.',color=col)
         if dit == len(data_list)-1:
             ax[second].set_xlabel('time index')
         else:
@@ -97,9 +100,6 @@ def compare_plot(output_filenames):
         divider = make_axes_locatable(ax[third])
         cax = divider.append_axes('right', size='5%', pad=0.05)
         fig.colorbar(p, cax=cax, orientation='vertical')
-        # if dit == 0:
-        #     fig.suptitle(r"ground model: $\rho="+str(
-        #         dataset['baseline_paras']['corr'])+r"$ "+dataset['baseline_paras']['gen_type']+" ensemble")
     fig.tight_layout()
     return fig
 

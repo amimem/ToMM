@@ -64,8 +64,9 @@ if __name__ == '__main__':
     data_filename = args.data_filename
     data = np.load(outdir + data_filename, allow_pickle=True).item()
 
-    states = data["states"][0]
-    actions = data["actions"][0]
+    seed_idx = 1
+    states = data["states"][seed_idx]
+    actions = data["actions"][seed_idx]
 
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -132,6 +133,6 @@ if __name__ == '__main__':
             running_loss += loss.item()
         print(f"Epoch {epoch+1}, loss: {running_loss/len(train_loader)}", flush=True)
         logging_loss.append(running_loss/len(train_loader))
-    np.save(outdir + data_filename[:-4] + "_loggedloss.npy", logging_loss)
+    np.save(outdir + data_filename[:-4] + f"_seed{seed_idx}_loggedloss.npy", logging_loss)
     torch.save(net.state_dict(), outdir +
-               data_filename[:-4] + "_" + model_name +".pt")
+               data_filename[:-4] + f"_seed{seed_idx}_" + model_name +".pt")

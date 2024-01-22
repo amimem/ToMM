@@ -106,6 +106,6 @@ if __name__ == '__main__':
     sim_parameters['exploit_mode'] = True
     sim_parameters['episode_length'] = 10
     sim_parameters['num_episodes'] = 10000
-    sim_parameters['num_seeds'] = 1
+    sim_parameters['num_seeds'] = 2
 
     generate_system_data(sys_parameters, sim_parameters, output_path)

@@ -72,7 +72,8 @@ class Decoder(nn.Module):
             n_channels=1,
             input_size=state_space_dim,
             hidden_layer_width=hidden_layer_width,
-            output_size=action_space_dim
+            output_size=action_space_dim,
+            output_dim = [action_space_dim]
         )
 
     def forward(self, state, abs_actions, abstract_agent_assignments):
