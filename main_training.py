@@ -12,6 +12,7 @@ import random
 from AbstractionModelJointPolicy import AbstractionModelJointPolicy
 from utils import MultiChannelNet
 import warnings
+import wandb
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
@@ -29,6 +30,7 @@ parser.add_argument('--seed', type=int, default=0, help='Random seed')
 
 args = parser.parse_args()
 
+wandb.init(project='STOMP', entity='main_training')
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device", flush=True)
@@ -133,6 +135,7 @@ if __name__ == '__main__':
             running_loss += loss.item()
         print(f"Epoch {epoch+1}, loss: {running_loss/len(train_loader)}", flush=True)
         logging_loss.append(running_loss/len(train_loader))
+        wandb.log({"epoch": epoch+1, "loss": running_loss/len(train_loader)})
     np.save(outdir + data_filename[:-4] + f"_seed{seed_idx}_loggedloss.npy", logging_loss)
     torch.save(net.state_dict(), outdir +
                data_filename[:-4] + f"_seed{seed_idx}_" + model_name +".pt")
