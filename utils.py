@@ -17,8 +17,8 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
 
 
 class MultiChannelNet(nn.Module):
-    # implements a 2D module array architecture. Parameters refer to architecture of individual channels.
-    # output of dimension: (n_channels,output_size), unless specified using input argument output_dim
+    # implements a 2D module array architecture. Each row is a channel. Parameters refer to architecture of individual channels.
+    # dimensions of output: (n_channels,output_size), unless specified using input argument output_dim
     def __init__(self, n_channels=1, input_size=10, hidden_layer_width=256, n_hidden_layers=2, output_size=10, output_dim=None):
         super(MultiChannelNet, self).__init__()
         self.module_array = nn.ModuleList(
@@ -30,7 +30,8 @@ class MultiChannelNet(nn.Module):
         self.n_channels = n_channels
         self.n_hidden_layers = n_hidden_layers
         self.default_output_dim = (n_channels, output_size)
-        self.output_dim = self.default_output_dim if output_dim is None else output_dim
+        self.output_dim = self.default_output_dim if output_dim is None else output_dim        
+
                 
     def forward(self, state):
         logit_vectors = []
@@ -42,7 +43,8 @@ class MultiChannelNet(nn.Module):
         if len(state.shape) >= 2:
             output = torch.stack(logit_vectors, dim=-2)
         else:
-            torch.cat(logit_vectors)
+            output = torch.stack(logit_vectors)
+
         if len(self.output_dim) != len(self.default_output_dim):
             output = output.reshape(tuple(output.shape[:-2]) + tuple(self.output_dim))
         return output

@@ -21,7 +21,8 @@ class Environment(nn.Module):
         # Create a linear layer
         self.linear_layer = nn.Linear(
             state_space_dim + num_agents, state_space_dim)
-        nn.init.normal_(self.linear_layer.weight,std=1/np.sqrt(state_space_dim + num_agents))
+        stability_factor = 2
+        nn.init.normal_(self.linear_layer.weight,std=stability_factor/np.sqrt(state_space_dim + num_agents))
 
     def forward(self, state, actions):
         # Apply the transition function to the state and actions

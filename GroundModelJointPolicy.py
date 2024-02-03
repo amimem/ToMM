@@ -18,8 +18,8 @@ class GroundModelJointPolicy(nn.Module):
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
         agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
+        
         if model_paras['groundmodel_name'] == 'bitpop':
-
             self.corr = model_paras['corr']
             gen_type = model_paras['gen_type']
             for abs_agent_idx in range(num_abs_agents):

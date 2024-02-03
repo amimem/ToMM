@@ -44,11 +44,12 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
         model_paras=jointagent_groundmodel_paras
     )
 
-    # run rollouts
+    # rollout model into a dataset of trajectories
     time_store = []
     state_store = []
     jointaction_store = []
     for seed in seedlist:
+        print(f"running seed {seed} of {len(seedlist)}")
         episode_time_indices = []
         state_seq = []
         joint_action_seq = []
@@ -86,8 +87,8 @@ if __name__ == '__main__':
     output_path = os.path.join(os.getcwd(), 'output/')
 
     sys_parameters = {}
-    sys_parameters['K'] = 10  # state space dimension
     sys_parameters['N'] = 10  # agents
+    sys_parameters['K'] = 5  # state space dimension
     # number of discrete actions; fixed to 2 for simplicity
     sys_parameters['action_space_dim'] = 2
 
@@ -104,7 +105,7 @@ if __name__ == '__main__':
 
     sim_parameters = {}
     sim_parameters['exploit_mode'] = True
-    sim_parameters['episode_length'] = 10
+    sim_parameters['episode_length'] = 100
     sim_parameters['num_episodes'] = 10000
     sim_parameters['num_seeds'] = 2
 

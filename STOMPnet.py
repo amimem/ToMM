@@ -4,9 +4,12 @@ from torch.nn import functional as F
 from utils import get_gumbel_softmax_sample, MultiChannelNet
 
 
-class AbstractionModelJointPolicy(nn.Module):
+class STOMPnet(nn.Module):
+    """
+    A scalable theory of mind policy network
+    """
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2):
-        super(AbstractionModelJointPolicy, self).__init__()
+        super(STOMPnet, self).__init__()
 
         # Define the encoder, decoder, and assigner
         self.sample_from_abstractjointpolicy = Encoder(
@@ -56,18 +59,16 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
     # a single agent network that conditions on the ground agent index
-    def __init__(self, num_abs_agents, num_agents, abs_action_space_dim, action_space_dim=2, hidden_layer_width=256):
+    def __init__(self, num_abs_agents, num_agents, abs_action_space_dim, action_space_dim=2, hidden_layer_width=256, agent_embedding_dim=256):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
-        # initialize ground agent embedding
-        embedding_dim = 256
+        # initialize ground agent embedding, dims=(num_agents,agent_embedding_dim)
         self.groundagent_embedding = nn.Embedding(
-            num_embeddings=num_agents, embedding_dim=embedding_dim)
+            num_embeddings=num_agents, embedding_dim=agent_embedding_dim)
 
         # initialize policies (input dimension is 1 (abstract action index) + embed_dim)
-        state_space_dim = 1 + embedding_dim
-        n_hidden_layers = 2
+        state_space_dim = 1 + agent_embedding_dim
         self.shared_groundagent_policy_network = MultiChannelNet(
             n_channels=1,
             input_size=state_space_dim,
@@ -78,15 +79,22 @@ class Decoder(nn.Module):
 
     def forward(self, state, abs_actions, abstract_agent_assignments):
         # map abstract actions to respective agents based on assignments and then concatenate with respective ground agent embedding vector
+        batch_flag = len(
+            state.shape) >= 2 
         assigned_abstract_actions = torch.stack(
-            [abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])], dim=0)
-        repeat_dims = (state.shape[0], 1, 1) if len(
-            state.shape) == 2 else (1, 1)
-        parallel_input = torch.cat([
-            torch.unsqueeze(assigned_abstract_actions, dim=-1),
-            torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(
-                range(self.num_agents))), dim=0).repeat(repeat_dims)
-        ], dim=-1)
+            [abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])], dim=0) if batch_flag else abs_actions[abstract_agent_assignments]
+        if batch_flag:
+            parallel_input = torch.cat([
+                torch.unsqueeze(assigned_abstract_actions, dim=-1),
+                torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(
+                    range(self.num_agents))), dim=0).repeat((state.shape[0], 1, 1))
+            ], dim=-1)
+        else:
+            parallel_input =  torch.cat([
+                torch.unsqueeze(assigned_abstract_actions, dim=-1),
+                self.groundagent_embedding(torch.LongTensor(
+                    range(self.num_agents)))
+            ], dim=-1)
         action_logit_vectors = self.shared_groundagent_policy_network(
             parallel_input)
         return action_logit_vectors
@@ -100,9 +108,9 @@ class Assigner(nn.Module):
         self.assigner_embedding_dim = num_abs_agents
 
         # initialize ground agent embedding
-        self.abs_agent_assignment_embedding = nn.Embedding(
+        abs_agent_assignment_embedding = nn.Embedding(
             num_embeddings=num_agents, embedding_dim=self.assigner_embedding_dim)
-        self.assigner_logit_array = self.abs_agent_assignment_embedding(
+        self.assigner_logit_array = abs_agent_assignment_embedding(
             torch.LongTensor(range(num_agents)))
 
     def forward(self, state):
