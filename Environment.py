@@ -35,6 +35,7 @@ class Environment(nn.Module):
             return F.sigmoid(self.linear_layer(torch.cat([state, actions]))), self.counter
 
     def sample_initial_state(self, state_space_dim, seed):
+        # make sure the random seed set here does not interfere with the random seed set in the main_training.py file
         random.seed(seed)
         # Sample an initial state from a uniform distribution
         return torch.Tensor(np.random.rand(state_space_dim))
