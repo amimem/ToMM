@@ -6,6 +6,29 @@ import itertools
 
 
 class GroundModelJointPolicy(nn.Module):
+    """
+    A class representing a joint policy for ground-level agents in a multi-agent reinforcement learning setting.
+
+    Args:
+        state_space_dim (int): The dimensionality of the state space.
+        num_abs_agents (int): The number of abstract agents.
+        agents_per_abstract_agent (int): The number of ground-level agents per abstract agent.
+        action_space_dim (int, optional): The dimensionality of the action space. Defaults to 2.
+        model_paras (dict, optional): Additional model parameters. Defaults to None.
+
+    Attributes:
+        num_agents (int): The total number of ground-level agents.
+        state_set (numpy.ndarray): An array containing all vertices of the unit hypercube.
+        num_states (int): The number of states in the state set.
+        action_space_dim (int): The dimensionality of the action space.
+        action_policies (numpy.ndarray): An array representing the action policies for each ground-level agent.
+
+    Methods:
+        forward(state): Computes the action probability vectors for the given state.
+        get_state_idx(state): Returns the index of the closest state in the state set.
+
+    """
+
     def __init__(self, state_space_dim, num_abs_agents, agents_per_abstract_agent, action_space_dim=2, model_paras=None):
         super(GroundModelJointPolicy, self).__init__()
         self.num_agents = num_abs_agents*agents_per_abstract_agent
@@ -47,10 +70,30 @@ class GroundModelJointPolicy(nn.Module):
             print('use a defined groundmodel')
 
     def forward(self, state):
+        """
+        Computes the action probability vectors for the given state.
+
+        Args:
+            state (torch.Tensor): The input state.
+
+        Returns:
+            torch.Tensor: The action probability vectors.
+
+        """
         state_idx = self.get_state_idx(state.detach().cpu().numpy())
         action_probability_vectors = np.hstack(
             (self.action_policies[:, state_idx][:, None], ~self.action_policies[:, state_idx][:, None]))
         return torch.Tensor(action_probability_vectors)
 
     def get_state_idx(self, state):
+        """
+        Returns the index of the closest state in the state set.
+
+        Args:
+            state (numpy.ndarray): The input state.
+
+        Returns:
+            int: The index of the closest state.
+
+        """
         return np.argmin(np.linalg.norm(self.state_set-state[None, :], axis=1))
