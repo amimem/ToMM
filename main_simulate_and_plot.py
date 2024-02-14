@@ -6,7 +6,7 @@ import numpy as np
 import os
 
 from Environment import Environment
-from AbstractionModelJointPolicy import AbstractionModelJointPolicy
+from STOMPnet import STOMPnet
 from GroundModelJointPolicy import GroundModelJointPolicy
 from utils import compare_plot
 
@@ -36,7 +36,7 @@ seed = 1
 env = Environment(state_space_dim, num_agents, epsiode_length, seed)
 
 # Initialize abstraction system model
-abstractionmodel = AbstractionModelJointPolicy(
+abstractionmodel = STOMPnet(
     state_space_dim,
     abs_action_space_dim,
     enc_hidden_dim,
@@ -93,7 +93,7 @@ if __name__ == '__main__':
                 actions = torch.argmax(action_probability_vectors, dim=-1)
             else:  # sample
                 # Categorical has batch functionality!
-                actions = Categorial(action_probability_vectors)
+                actions = Categorical(action_probability_vectors)
             joint_action_seq.append(actions.detach().cpu().numpy())
             env.state, episode_step = env.step(env.state, actions)
             episode_time_indices.append(episode_step)

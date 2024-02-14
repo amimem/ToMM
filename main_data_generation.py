@@ -63,7 +63,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
                 actions = torch.argmax(action_probability_vectors, dim=-1)
             else:  # sample
                 # Categorical has batch functionality!
-                actions = Categorial(action_probability_vectors)
+                actions = Categorical(action_probability_vectors)
             joint_action_seq.append(actions.detach().cpu().numpy())
             env.state, episode_step = env.forward(env.state, actions)
             episode_time_indices.append(episode_step)
