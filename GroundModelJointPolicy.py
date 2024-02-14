@@ -17,7 +17,6 @@ class GroundModelJointPolicy(nn.Module):
         rng = np.random.default_rng()
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
-        agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
         
         if model_paras['groundmodel_name'] == 'bitpop':
             self.corr = model_paras['corr']
@@ -25,6 +24,7 @@ class GroundModelJointPolicy(nn.Module):
             for abs_agent_idx in range(num_abs_agents):
                 agent_indices = range(abs_agent_idx * agents_per_abstract_agent,
                                       (abs_agent_idx + 1) * agents_per_abstract_agent)
+                agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
                 agent_indices_bool[agent_indices] = True
                 if (gen_type == "mix"):  # Bernoulli mixture of independent and identical binary RVs
                     is_same = self.corr > rng.random(self.num_states)
@@ -43,7 +43,6 @@ class GroundModelJointPolicy(nn.Module):
                         * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
                 else:
                     print("choose sum or mix")
-                agent_indices_bool[agent_indices] = False
         else:
             print('use a defined groundmodel')
 
