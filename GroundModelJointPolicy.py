@@ -81,6 +81,7 @@ class GroundModelJointPolicy(nn.Module):
 
         """
         state_idx = self.get_state_idx(state.detach().cpu().numpy())
+        # why is this necessary? the resulting tensor is of size (num_agents, 2), where 2 is the action space dimension, but does it generalize to other action spaces?
         action_probability_vectors = np.hstack(
             (self.action_policies[:, state_idx][:, None], ~self.action_policies[:, state_idx][:, None]))
         return torch.Tensor(action_probability_vectors)
