@@ -17,8 +17,19 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
 
 
 class MultiChannelNet(nn.Module):
-    # implements a 2D module array architecture. Each row is a channel. Parameters refer to architecture of individual channels.
-    # dimensions of output: (n_channels,output_size), unless specified using input argument output_dim
+    """
+    Implements a 2D module array architecture. Each row is a channel. Parameters refer to architecture of individual channels.
+    Dimensions of output: (n_channels, output_size), unless specified using input argument output_dim.
+
+    Args:
+        n_channels (int, optional): Number of channels. Defaults to 1.
+        input_size (int, optional): Size of input vector. Defaults to 10.
+        hidden_layer_width (int, optional): Width of hidden layers. Defaults to 256.
+        n_hidden_layers (int, optional): Number of hidden layers. Defaults to 2.
+        output_size (int, optional): Size of output vector. Defaults to 10.
+        output_dim (tuple, optional): Dimensions of output. Defaults to None.
+    """
+
     def __init__(self, n_channels=1, input_size=10, hidden_layer_width=256, n_hidden_layers=2, output_size=10, output_dim=None):
         super(MultiChannelNet, self).__init__()
         self.module_array = nn.ModuleList(
@@ -29,25 +40,35 @@ class MultiChannelNet(nn.Module):
             ) for channel_idx in range(n_channels))
         self.n_channels = n_channels
         self.n_hidden_layers = n_hidden_layers
+        self.n_all_layers = n_hidden_layers + 2 # including input and output layers
         self.default_output_dim = (n_channels, output_size)
         self.output_dim = self.default_output_dim if output_dim is None else output_dim        
 
                 
     def forward(self, state):
-        logit_vectors = []
-        for channel_idx in range(self.n_channels):
-            x = torch.relu(self.module_array[channel_idx][0](state))
-            for layer_idx in range(self.n_hidden_layers+1):
-                x = torch.relu(self.module_array[channel_idx][layer_idx+1](x))
-            logit_vectors.append(x) 
-        if len(state.shape) >= 2:
-            output = torch.stack(logit_vectors, dim=-2)
-        else:
-            output = torch.stack(logit_vectors)
+            """
+            Forward pass of the model.
 
-        if len(self.output_dim) != len(self.default_output_dim):
-            output = output.reshape(tuple(output.shape[:-2]) + tuple(self.output_dim))
-        return output
+            Args:
+                state (torch.Tensor): Input state tensor.
+
+            Returns:
+                torch.Tensor: Output tensor after passing through the model.
+            """
+            logit_vectors = []
+            for channel_idx in range(self.n_channels):
+                x = state.clone() # clone to avoid in-place operations
+                for layer_idx in range(0, self.n_all_layers):
+                    x = torch.relu(self.module_array[channel_idx][layer_idx](x))
+                logit_vectors.append(x) 
+            if len(state.shape) >= 2:
+                output = torch.stack(logit_vectors, dim=-2)
+            else:
+                output = torch.stack(logit_vectors)
+
+            if len(self.output_dim) != len(self.default_output_dim):
+                output = output.reshape(tuple(output.shape[:-2]) + tuple(self.output_dim))
+            return output
 
 
 def compare_plot(output_filenames):
