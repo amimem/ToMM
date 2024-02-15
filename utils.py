@@ -6,13 +6,19 @@ import numpy as np
 import seaborn as sb
 
 def get_gumbel_softmax_sample(logit_vector, tau=1):
-    # Compute Gumbel softmax sample for both hard and soft cases
+    """
+    Compute Gumbel softmax sample for both hard and soft cases.
+
+    Args:
+        logit_vector (torch.Tensor): The input logit vector.
+        tau (float, optional): The temperature parameter for Gumbel softmax. Defaults to 1.
+
+    Returns:
+        torch.Tensor: The differentiable version of the hard Gumbel softmax sample.
+    """
     y_hard = F.gumbel_softmax(logit_vector, tau=tau, hard=True)
     y_soft = F.gumbel_softmax(logit_vector, tau=tau, hard=False)
-
-    # Create a differentiable version of y_hard
     y_hard_diff = y_hard - y_soft.detach() + y_soft
-
     return y_hard_diff
 
 
