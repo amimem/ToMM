@@ -15,14 +15,20 @@ class STOMPnet(nn.Module):
         num_agents (int): Number of agents
         num_abs_agents (int): Number of abstract agents
         action_space_dim (int, optional): Dimension of the action space. Defaults to 2.
+    
+    Attributes:
+        sample_from_abstract_joint_policy (Encoder): Encoder module
+        ground_joint_policy (Decoder): Decoder module
+        assigner (Assigner): Assigner module
+
     """
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2):
         super(STOMPnet, self).__init__()
 
         # Define the encoder, decoder, and assigner
-        self.sample_from_abstractjointpolicy = Encoder(
+        self.sample_from_abstract_joint_policy = Encoder(
             state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
-        self.groundjointpolicy = Decoder(num_agents, action_space_dim)
+        self.ground_joint_policy = Decoder(num_agents, action_space_dim)
         self.assigner = Assigner(num_abs_agents, num_agents)
 
     def forward(self, state):
@@ -36,13 +42,13 @@ class STOMPnet(nn.Module):
             torch.Tensor: Output tensor representing the action probabilities
         """
         # Pass the state through the encoder to get abstract actions
-        abs_actions = self.sample_from_abstractjointpolicy(state)
+        abs_actions = self.sample_from_abstract_joint_policy(state)
 
         # call assigner to sample assignments
         abstract_agent_assignments = self.assigner(state)
 
         # Pass the abstract actions ans assignments through the decoder to get action probabilities
-        ground_action_logit_vectors = self.groundjointpolicy(
+        ground_action_logit_vectors = self.ground_joint_policy(
             state, abs_actions, abstract_agent_assignments)
 
         return ground_action_logit_vectors
