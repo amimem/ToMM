@@ -22,8 +22,7 @@ class STOMPnet(nn.Module):
         # Define the encoder, decoder, and assigner
         self.sample_from_abstractjointpolicy = Encoder(
             state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
-        self.groundjointpolicy = Decoder(
-            num_abs_agents, num_agents, abs_action_space_dim, action_space_dim)
+        self.groundjointpolicy = Decoder(num_agents, action_space_dim)
         self.assigner = Assigner(num_abs_agents, num_agents)
 
     def forward(self, state):
@@ -107,9 +106,7 @@ class Decoder(nn.Module):
     Decoder module for the STOMPnet model.
 
     Args:
-        num_abs_agents (int): Number of abstract agents.
         num_agents (int): Number of ground agents.
-        abs_action_space_dim (int): Dimension of the abstract action space.
         action_space_dim (int, optional): Dimension of the action space. Defaults to 2.
         hidden_layer_width (int, optional): Width of the hidden layer. Defaults to 256.
         agent_embedding_dim (int, optional): Dimension of the agent embedding. Defaults to 256.
@@ -120,7 +117,7 @@ class Decoder(nn.Module):
         shared_groundagent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
     """
 
-    def __init__(self, num_abs_agents, num_agents, abs_action_space_dim, action_space_dim=2, hidden_layer_width=256, agent_embedding_dim=256):
+    def __init__(self, num_agents, action_space_dim=2, hidden_layer_width=256, agent_embedding_dim=256):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
