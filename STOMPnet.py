@@ -113,8 +113,8 @@ class Decoder(nn.Module):
 
     Attributes:
         num_agents (int): Number of ground agents.
-        groundagent_embedding (nn.Embedding): Embedding for ground agents.
-        shared_groundagent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
+        ground_agent_embedding (nn.Embedding): Embedding for ground agents.
+        shared_ground_agent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
     """
 
     def __init__(self, num_agents, action_space_dim=2, hidden_layer_width=256, agent_embedding_dim=256):
@@ -122,12 +122,12 @@ class Decoder(nn.Module):
         self.num_agents = int(num_agents)
 
         # initialize ground agent embedding, dims=(num_agents,agent_embedding_dim)
-        self.groundagent_embedding = nn.Embedding(
+        self.ground_agent_embedding = nn.Embedding(
             num_embeddings=num_agents, embedding_dim=agent_embedding_dim)
 
         # initialize policies (input dimension is 1 (abstract action index) + embed_dim)
         state_space_dim = 1 + agent_embedding_dim
-        self.shared_groundagent_policy_network = MultiChannelNet(
+        self.shared_ground_agent_policy_network = MultiChannelNet(
             n_channels=1,
             input_size=state_space_dim,
             hidden_layer_width=hidden_layer_width,
@@ -153,16 +153,16 @@ class Decoder(nn.Module):
         if batch_flag:
             parallel_input = torch.cat([
                 torch.unsqueeze(assigned_abstract_actions, dim=-1),
-                torch.unsqueeze(self.groundagent_embedding(torch.LongTensor(
+                torch.unsqueeze(self.ground_agent_embedding(torch.LongTensor(
                     range(self.num_agents))), dim=0).repeat((state.shape[0], 1, 1))
             ], dim=-1)
         else:
             parallel_input = torch.cat([
                 torch.unsqueeze(assigned_abstract_actions, dim=-1),
-                self.groundagent_embedding(torch.LongTensor(
+                self.ground_agent_embedding(torch.LongTensor(
                     range(self.num_agents)))
             ], dim=-1)
-        action_logit_vectors = self.shared_groundagent_policy_network(
+        action_logit_vectors = self.shared_ground_agent_policy_network(
             parallel_input)
         return action_logit_vectors
 
