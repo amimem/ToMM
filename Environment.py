@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
-class Environment(nn.Module):
+class Environment:
     def __init__(self, state_space_dim, num_agents, episode_length, start_seed=1):
         """
         Initializes an environment for multi-agent reinforcement learning.
@@ -16,8 +16,6 @@ class Environment(nn.Module):
             episode_length (int): Length of each episode.
             start_seed (int, optional): Starting seed for random number generation. Defaults to 1.
         """
-        super(Environment, self).__init__()
-
         self.state_space_dim = state_space_dim
 
         # episodic properties
@@ -31,9 +29,14 @@ class Environment(nn.Module):
         self.linear_layer = nn.Linear(
             state_space_dim + num_agents, state_space_dim)
         stability_factor = 2
-        nn.init.normal_(self.linear_layer.weight,std=stability_factor/np.sqrt(state_space_dim + num_agents))
+        nn.init.normal_(self.linear_layer.weight, std=stability_factor / np.sqrt(state_space_dim + num_agents))
 
-    def forward(self, state, actions):
+        # matrix implementation
+        # self.weight_matrix = torch.randn(state_space_dim, state_space_dim + num_agents)
+        # stability_factor = 2
+        # self.weight_matrix *= stability_factor / np.sqrt(state_space_dim + num_agents)
+
+    def step(self, state, actions):
         """
         Performs a forward pass through the environment.
 
