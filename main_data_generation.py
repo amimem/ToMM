@@ -65,7 +65,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path):
                 # Categorical has batch functionality!
                 actions = Categorical(action_probability_vectors)
             joint_action_seq.append(actions.detach().cpu().numpy())
-            env.state, episode_step = env.forward(env.state, actions)
+            env.state, episode_step = env.step(env.state, actions)
             episode_time_indices.append(episode_step)
         time_store.append(episode_time_indices)
         state_store.append(state_seq)

@@ -12,12 +12,12 @@ import random
 from STOMPnet import STOMPnet
 from utils import MultiChannelNet
 import warnings
-import wandb
+# import wandb
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    default='STOMPnet_2_10_256', help='Name of the model') # (M,L,n_features)
+                    default='singletask_baseline', help='Name of the model') # (M,L,n_features)
 parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
                     default=1e-3, help='Learning rate')
@@ -30,7 +30,7 @@ parser.add_argument('--seed', type=int, default=0, help='Random seed')
 
 args = parser.parse_args()
 
-wandb.init(project='STOMP', entity='main_training')
+# wandb.init(project='STOMP', entity='main_training')
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device", flush=True)
@@ -143,7 +143,7 @@ if __name__ == '__main__':
         epoch_loss = running_loss/len(train_loader)
         print(f"Epoch {epoch+1}, loss: {epoch_loss}", flush=True)
         logging_loss.append(epoch_loss)
-        wandb.log({"epoch": epoch+1, "loss": epoch_loss})
+        # wandb.log({"epoch": epoch+1, "loss": epoch_loss})
     np.save(outdir + data_filename[:-4] + f"_seed{seed_idx}_loggedloss.npy", logging_loss)
     torch.save(net.state_dict(), outdir +
                data_filename[:-4] + f"_seed{seed_idx}_" + model_name +".pt")
