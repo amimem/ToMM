@@ -148,7 +148,7 @@ class Decoder(nn.Module):
         Args:
             state (torch.Tensor): Input state.
             abs_actions (torch.Tensor): Abstract actions.
-            abstract_agent_assignments (torch.Tensor): Assignments of abstract agents to ground agents.
+            abstract_agent_assignments (torch.Tensor): Assignments of ground agents to abstract agents.
 
         Returns:
             torch.Tensor: Action logit vectors.
@@ -156,6 +156,7 @@ class Decoder(nn.Module):
         batch_flag = len(state.shape) >= 2
         assigned_abstract_actions = torch.stack(
             [abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(state.shape[0])], dim=0) if batch_flag else abs_actions[abstract_agent_assignments]
+        # run decoder network in parallel over all ground agents
         if batch_flag:
             parallel_input = torch.cat([
                 torch.unsqueeze(assigned_abstract_actions, dim=-1),

@@ -5,14 +5,14 @@ from numpy import random
 import itertools
 
 
-class GroundModelJointPolicy(nn.Module):
+class GroundModelJointPolicy():
     """
     A class representing a joint policy for ground-level agents in a multi-agent reinforcement learning setting.
 
     Args:
         state_space_dim (int): The dimensionality of the state space.
-        num_abs_agents (int): The number of abstract agents.
-        agents_per_abstract_agent (int): The number of ground-level agents per abstract agent.
+        num_agent_groups (int): The number of abstract agents.
+        agents_per_group (int): The number of ground-level agents per abstract agent.
         action_space_dim (int, optional): The dimensionality of the action space. Defaults to 2.
         model_paras (dict, optional): Additional model parameters. Defaults to None.
 
@@ -29,9 +29,10 @@ class GroundModelJointPolicy(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, num_abs_agents, agents_per_abstract_agent, action_space_dim=2, model_paras=None):
+    def __init__(self, num_agents, state_space_dim, action_space_dim=2, model_paras=None):
         super(GroundModelJointPolicy, self).__init__()
-        self.num_agents = num_abs_agents*agents_per_abstract_agent
+
+        self.num_agents = num_agents
         self.state_set = np.array([np.array(l) for l in list(map(list, itertools.product(
             [0, 1], repeat=state_space_dim)))])  # all vertices of unit hypercube
         self.num_states = len(self.state_set)
@@ -40,13 +41,19 @@ class GroundModelJointPolicy(nn.Module):
         rng = np.random.default_rng()
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
-        
-        if model_paras['groundmodel_name'] == 'bitpop':
+
+        if model_paras['modelname'] == 'bitpop':
+
             self.corr = model_paras['corr']
-            gen_type = model_paras['gen_type']
-            for abs_agent_idx in range(num_abs_agents):
-                agent_indices = range(abs_agent_idx * agents_per_abstract_agent,
-                                      (abs_agent_idx + 1) * agents_per_abstract_agent)
+            gen_type = model_paras['ensemble']
+            num_agent_groups = model_paras['M']
+            assert (num_agents/num_agent_groups).is_integer(
+            ), "Uneven group sizes. bitpop model requires group sizes to be equal"
+            agents_per_group = int(num_agents/num_agent_groups)
+
+            for agent_group_idx in range(num_agent_groups):
+                agent_indices = range(agent_group_idx * agents_per_group,
+                                      (agent_group_idx + 1) * agents_per_group)
                 agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
                 agent_indices_bool[agent_indices] = True
                 if (gen_type == "mix"):  # Bernoulli mixture of independent and identical binary RVs
@@ -56,12 +63,12 @@ class GroundModelJointPolicy(nn.Module):
                     self.action_policies[np.ix_(agent_indices_bool, is_same)] = rng.integers(
                         0, 2, n_same)[np.newaxis, :]
                     self.action_policies[np.ix_(agent_indices_bool, ~is_same)] = rng.integers(
-                        0, 2, [agents_per_abstract_agent, n_diff])
+                        0, 2, [agents_per_group, n_diff])
                 elif (gen_type == "sum"):  # signed sum of independent and identical normal RVs
                     rho_normaldist = np.sin(np.pi / 2 * self.corr)
                     self.action_policies[agent_indices_bool, :] = (
                         np.sqrt(1 - rho_normaldist)
-                        * rng.normal(size=(agents_per_abstract_agent, self.num_states))
+                        * rng.normal(size=(agents_per_group, self.num_states))
                         + np.sqrt(rho_normaldist)
                         * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
                 else:
