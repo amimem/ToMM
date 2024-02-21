@@ -68,8 +68,9 @@ if __name__ == '__main__':
     training_paras['learning_rate'] = learning_rate
     training_paras['batch_size'] = batch_size
     training_paras['train_seed'] = seed
+    print(f"seed {seed} training of {args.model_name} with capacity {args.hidden_capacity} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}")
 
-    # load the data in the output folder
+    # load the data from the output folder
     outdir = args.outdir
     data_settings = np.load(outdir + args.data_filename +
                             '.npy', allow_pickle=True).item()
@@ -77,11 +78,8 @@ if __name__ == '__main__':
     print("using data:"+data_filename)
     data = np.load(outdir + data_filename + '.npy',
                    allow_pickle=True).item()
-
-    # use first seed of data
     states = data["states"]
     actions = data["actions"]
-    # actions = np.ones(data["actions"].shape)
 
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -96,7 +94,6 @@ if __name__ == '__main__':
     model_paras['hidden_capacity'] = args.hidden_capacity
     # model_name should end with list of parameter names and values
     model_paras['model_name'] = args.model_name.split('_')[0]
-    print(f"seed {seed} training of {args.model_name} with capacity {args.hidden_capacity} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}")
     if len(args.model_name.split('_')) > 1:
         para_list = args.model_name.split('_')[1:]
         for para_idx in range(int(len(para_list)/2)):
