@@ -197,7 +197,7 @@ class Assigner(nn.Module):
             num_embeddings=num_agents, embedding_dim=self.assigner_embedding_dim)
         
         self.assigner_logit_array = abs_agent_assignment_embedding(
-            torch.LongTensor(range(num_agents)))
+            torch.LongTensor(range(num_agents))) # shape=(num_agents, assigner_embedding_dim)
 
     def forward(self, state):
         repeat_dims = (state.shape[0], 1, 1) if len(
