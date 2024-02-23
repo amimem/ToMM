@@ -195,6 +195,7 @@ class Assigner(nn.Module):
 
         self.abs_agent_assignment_embedding = nn.Embedding(
             num_embeddings=num_agents, embedding_dim=self.assigner_embedding_dim)
+        
 
     def forward(self, state):
         repeat_dims = (state.shape[0], 1, 1) if len(
