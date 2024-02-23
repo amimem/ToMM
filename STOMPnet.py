@@ -193,17 +193,14 @@ class Assigner(nn.Module):
         # components are abstract agent weights
         self.assigner_embedding_dim = num_abs_agents
 
-        abs_agent_assignment_embedding = nn.Embedding(
+        self.abs_agent_assignment_embedding = nn.Embedding(
             num_embeddings=num_agents, embedding_dim=self.assigner_embedding_dim)
-        
-        self.assigner_logit_array = abs_agent_assignment_embedding(
-            torch.LongTensor(range(num_agents)))
 
     def forward(self, state):
         repeat_dims = (state.shape[0], 1, 1) if len(
             state.shape) == 2 else (1, 1)
         one_hot_assignment_array = get_gumbel_softmax_sample(
-            self.assigner_logit_array.repeat(repeat_dims))  # samples for each member of batch
+            self.abs_agent_assignment_embedding.weight.repeat(repeat_dims))  # samples for each member of batch
 
         abstract_agent_assignments = torch.argmax(
             one_hot_assignment_array, dim=-1)

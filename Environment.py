@@ -27,9 +27,16 @@ class Environment:
 
         # Create a linear layer
         self.linear_layer = nn.Linear(
+            # state_space_dim, state_space_dim)
             state_space_dim + num_agents, state_space_dim)
-        stability_factor = 2
-        nn.init.normal_(self.linear_layer.weight, std=stability_factor / np.sqrt(state_space_dim + num_agents))
+        for param in self.linear_layer.parameters():
+            param.requires_grad = False
+        stability_factor = 5 # coupling strength parameter g, sqrt(2) is critical value for tanh 
+        # nn.init.normal_(self.linear_layer.weight, std=stability_factor / np.sqrt(2*state_space_dim + num_agents))
+        nn.init.normal_(self.linear_layer.weight, std=stability_factor / np.sqrt(state_space_dim))
+
+        # nn.init.xavier_normal_(self.linear_layer.weight, gain=stability_factor / np.sqrt(state_space_dim + num_agents))
+        self.linear_layer.bias.fill_(0.)
 
         # matrix implementation
         # self.weight_matrix = torch.randn(state_space_dim, state_space_dim + num_agents)
@@ -54,7 +61,9 @@ class Environment:
             self.seed += 1
             return self.sample_initial_state(self.state_space_dim, self.seed), self.T
         else:
-            return F.sigmoid(self.linear_layer(torch.cat([state, actions]))), self.counter
+            # return self.linear_layer(F.tanh(state)), self.counter
+            return F.tanh(self.linear_layer(torch.cat([state, actions]))), self.counter
+            # return F.sigmoid(self.linear_layer(torch.cat([state, actions]))), self.counter
 
     def sample_initial_state(self, state_space_dim, seed):
         """

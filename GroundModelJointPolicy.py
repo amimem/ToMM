@@ -104,4 +104,4 @@ class GroundModelJointPolicy():
             int: The index of the closest state.
 
         """
-        return np.argmin(np.linalg.norm(self.state_set-state[None, :], axis=1))
+        return np.argmin(np.linalg.norm(self.state_set-(state[None, :]>0), axis=1))

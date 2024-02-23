@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
     sys_parameters = {}
     sys_parameters['N'] = 4  # agents
-    sys_parameters['K'] = 5  # state space dimension
+    sys_parameters['K'] = 2  # state space dimension
     # number of discrete actions; fixed to 2 for simplicity
     sys_parameters['action_space_dim'] = 2
 
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     jointagent_groundmodel_paras['modelname'] = groundmodel_name
 
     if groundmodel_name == "bitpop":
-        jointagent_groundmodel_paras["corr"] = 1  # action pair correlation
+        jointagent_groundmodel_paras["corr"] = 1.0  # action pair correlation
         jointagent_groundmodel_paras['ensemble'] = 'sum'
         jointagent_groundmodel_paras['M'] = 2  # number of agent groups
         assert (sys_parameters['N']/jointagent_groundmodel_paras['M']).is_integer(), \

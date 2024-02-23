@@ -27,7 +27,7 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_filename', type=str,
-                    default='_3agentdebug_modelname_bitpop_corr_1_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_100_K_5_N_4_T_100', help='Data filename')
+                    default='_3agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_100_K_2_N_4_T_100', help='Data filename')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
