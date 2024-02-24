@@ -106,7 +106,7 @@ if __name__ == '__main__':
             "number of agents groups should divide total number of agents for some groundmodels"
 
     else:
-        abort("select an implemented groundmodel")
+        os.abort("select an implemented groundmodel")
     sys_parameters['jointagent_groundmodel_paras'] = jointagent_groundmodel_paras
 
     sim_parameters = {}
