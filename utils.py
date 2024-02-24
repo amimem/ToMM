@@ -72,7 +72,7 @@ class MultiChannelNet(nn.Module):
             else:
                 output = torch.stack(logit_vectors)
 
-            if len(self.output_dim) != len(self.default_output_dim):
+            if self.output_dim != self.default_output_dim:
                 output = output.reshape(tuple(output.shape[:-2]) + tuple(self.output_dim))
             return output
 

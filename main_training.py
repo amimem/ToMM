@@ -17,9 +17,10 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
+                    # default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
+                    default='multitaskbaseline', help='Name of the model')
 parser.add_argument('--hidden_capacity', type=int,
-                    default=250, help='capacity of abstract joint policy space')
+                    default=240, help='capacity of abstract joint policy space')
 parser.add_argument('--epochs', type=int, default=10, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
                     default=1e-3, help='Learning rate')
@@ -27,7 +28,7 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_filename', type=str,
-                    default='_3agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_100_K_2_N_4_T_100', help='Data filename')
+                    default='_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_10_K_5_N_4_T_1000_g_10', help='Data filename')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
@@ -115,7 +116,7 @@ if __name__ == '__main__':
             num_abs_agents,
             action_space_dim=action_space_dim
         )
-    elif model_paras['model_name'] == 'singletask_baseline':
+    elif model_paras['model_name'] == 'singletaskbaseline':
         assert (args.hidden_capacity /
                 num_agents).is_integer(), "num of agents should divide hidden dimensions"
         net = MultiChannelNet(
@@ -124,7 +125,7 @@ if __name__ == '__main__':
             hidden_layer_width=int(args.hidden_capacity/num_agents),
             output_size=action_space_dim
         )
-    elif model_paras['model_name'] == 'multitask_baseline':
+    elif model_paras['model_name'] == 'multitaskbaseline':
         net = MultiChannelNet(
             n_channels=1,
             input_size=state_space_dim,
@@ -151,7 +152,6 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             # output is (batchsize, number of agents, action space size)
             action_logit_vectors = net(inputs)
-
             # loss = criterion(torch.swapaxes(
             #     action_logit_vectors, 1, 2), labels.type(torch.LongTensor))
             loss = sum(criterion(torch.squeeze(action_logit_vectors[:, agent_idx, :]), labels.type(

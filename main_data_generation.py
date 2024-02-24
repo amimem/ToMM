@@ -14,6 +14,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
     # assign system parameters
     state_space_dim = sys_parameters['K']   # state space dimension
     num_agents = sys_parameters['N']   # agents
+    fluctuation_strength_factor = sys_parameters['fluctuation_strength_factor']
     action_space_dim = sys_parameters['action_space_dim']
 
     # assign sim parameters
@@ -21,7 +22,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
     num_episodes = sim_parameters['num_episodes']
     action_selection = sim_parameters['actsel']
 
-    output_filename = f"{output_path}_{dataset_label}_simulationdata_actsel_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{epsiode_length}"
+    output_filename = f"{output_path}_{dataset_label}_simulationdata_actsel_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{epsiode_length}_g_{fluctuation_strength_factor}"
     sim_parameters["dataset_label"] = dataset_label
     sim_parameters['sys_parameters'] = sys_parameters
     np.save(output_filename+'.npy', sim_parameters)
@@ -29,7 +30,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
     # assign data generation parameters
     seedlist = range(sim_parameters['num_seeds'])
     num_steps = sim_parameters['num_episodes']*epsiode_length
-
+    num_warmup_steps = 100
     # Initialize Groundmodel
     model = GroundModelJointPolicy(
         num_agents,
@@ -40,7 +41,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
 
     # Initialize environment
     dummy_seed = 1
-    env = Environment(state_space_dim, num_agents, epsiode_length, dummy_seed)
+    env = Environment(state_space_dim, num_agents, epsiode_length, fluctuation_strength_factor, dummy_seed)
 
     # rollout model into a dataset of trajectories
     for seed in seedlist:
@@ -49,6 +50,17 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
         state_seq = []
         joint_action_seq = []
         env.state = env.sample_initial_state(state_space_dim, seed)
+
+        #warmup
+        for step in range(num_warmup_steps):
+            action_probability_vectors = model.forward(env.state)
+            if action_selection == 'greedy':  # take greedy action
+                actions = torch.argmax(action_probability_vectors, dim=-1)
+            else:  # sample
+                # Categorical has batch functionality!
+                actions = Categorical(action_probability_vectors)
+            env.state, episode_step = env.step(env.state, actions)
+
         for step in range(num_steps):
 
             state_seq.append(env.state.detach().cpu().numpy())
@@ -73,12 +85,13 @@ if __name__ == '__main__':
 
     output_path = os.path.join(os.getcwd(), 'output/')
 
-    dataset_label = "3agentdebug"
+    dataset_label = "4agentdebug"
     groundmodel_name = "bitpop"
 
     sys_parameters = {}
     sys_parameters['N'] = 4  # agents
-    sys_parameters['K'] = 2  # state space dimension
+    sys_parameters['K'] = 5  # state space 
+    sys_parameters['fluctuation_strength_factor'] = 10  # stability transition control parameter
     # number of discrete actions; fixed to 2 for simplicity
     sys_parameters['action_space_dim'] = 2
 
@@ -98,8 +111,8 @@ if __name__ == '__main__':
 
     sim_parameters = {}
     sim_parameters['actsel'] = 'greedy'
-    sim_parameters['episode_length'] = 100
-    sim_parameters['num_episodes'] = 100
+    sim_parameters['episode_length'] = 1000
+    sim_parameters['num_episodes'] = 10
     sim_parameters['num_seeds'] = 2
 
     # add parameter setting of ground model to label
