@@ -33,7 +33,7 @@ class Environment:
         self.RNN = torch.nn.RNN(input_size, hidden_size, bias=False)
         for param in self.RNN.parameters():
             param.requires_grad = False
-        input_variance_weight = 0.5 / # input-to-recurrent variance ratio
+        input_variance_weight = 0.5  # input-to-recurrent variance ratio
         input_dilution_factor = 0.5  # average action value (uniform on {0,1})
         nn.init.normal_(self.RNN.weight_ih_l0, std=fluctuation_strength_factor *
                         np.sqrt(input_variance_weight/(input_dilution_factor*input_size)))
