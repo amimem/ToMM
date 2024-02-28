@@ -155,18 +155,17 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             # output is (batchsize, number of agents, action space size)
             action_logit_vectors = net(inputs)
-            # loss = criterion(torch.swapaxes(
-            #     action_logit_vectors, 1, 2), labels.type(torch.LongTensor))
+            # sum loss over agents (criterion function sums loss over samples in batch)
             loss = sum(criterion(torch.squeeze(action_logit_vectors[:, agent_idx, :]), labels.type(
                 torch.LongTensor)[:, agent_idx]) for agent_idx in range(num_agents))
-            # loss = criterion(action_logit_vectors.reshape((batch_size*num_agents,action_space_dim)), labels.type(torch.LongTensor))
 
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
             max_scores, max_idx_class = net(inputs).max(dim=2)
             running_correct += (labels == max_idx_class).sum().item()
-        epoch_accuracy = running_correct/(len(train_loader)*batch_size*num_agents)
+        epoch_accuracy = running_correct / \
+            (len(train_loader)*batch_size*num_agents)
         epoch_loss = running_loss/(len(train_loader)*batch_size*num_agents)
 
         print(f"Epoch {epoch+1}, loss: {epoch_loss:.5}, acc: {epoch_accuracy:.5}", flush=True)

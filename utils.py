@@ -56,7 +56,7 @@ class MultiChannelNet(nn.Module):
             Forward pass of the model.
 
             Args:
-                state (torch.Tensor): Input state tensor.
+                state (torch.Tensor): Input state tensor of dimension (batch_size, statespace_dim).
 
             Returns:
                 torch.Tensor: Output tensor after passing through the model.
@@ -67,10 +67,10 @@ class MultiChannelNet(nn.Module):
                 for layer_idx in range(0, self.n_all_layers):
                     x = torch.relu(self.module_array[channel_idx][layer_idx](x))
                 logit_vectors.append(x) 
-            if len(state.shape) >= 2:
-                output = torch.stack(logit_vectors, dim=-2)
-            else:
-                output = torch.stack(logit_vectors)
+            # if len(state.shape) >= 2:
+            output = torch.stack(logit_vectors, dim=1)
+            # else:
+                # output = torch.stack(logit_vectors)
 
             if self.output_dim != self.default_output_dim:
                 output = output.reshape(tuple(output.shape[:-2]) + tuple(self.output_dim))

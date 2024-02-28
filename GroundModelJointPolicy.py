@@ -8,6 +8,7 @@ import itertools
 class GroundModelJointPolicy():
     """
     A class representing a joint policy for ground-level agents in a multi-agent reinforcement learning setting.
+    The observation is the index of the state space orthant (indexed in binary in state_set) containing the current state.
 
     Args:
         state_space_dim (int): The dimensionality of the state space.
@@ -88,9 +89,10 @@ class GroundModelJointPolicy():
 
         """
         state_idx = self.get_state_idx(state.detach().cpu().numpy())
-        # why is this necessary? the resulting tensor is of size (num_agents, 2), where 2 is the action space dimension, but does it generalize to other action spaces?
+        # the following is for actionspace_dim=2 only
+        action_0_probabilities = self.action_policies[:, state_idx][:, None]
         action_probability_vectors = np.hstack(
-            (self.action_policies[:, state_idx][:, None], ~self.action_policies[:, state_idx][:, None]))
+            (action_0_probabilities, ~action_0_probabilities))
         return torch.Tensor(action_probability_vectors)
 
     def get_state_idx(self, state):
@@ -104,4 +106,4 @@ class GroundModelJointPolicy():
             int: The index of the closest state.
 
         """
-        return np.argmin(np.linalg.norm(self.state_set-(state[None, :]>0), axis=1))
+        return np.argmin(np.linalg.norm(self.state_set-(state[None, :] > 0), axis=1))

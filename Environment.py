@@ -19,7 +19,7 @@ class Environment:
         """
         self.state_space_dim = state_space_dim
         self.RNNdim = 100
-        assert self.state_space_dim<= self.RNNdim, "can observe more degrees of freedom than are in system"
+        assert self.state_space_dim <= self.RNNdim, "can observe more degrees of freedom than are in system"
         # episodic properties
         self.T = episode_length
         self.counter = 0
@@ -30,14 +30,15 @@ class Environment:
         # instantiate rnn
         input_size = num_agents
         hidden_size = self.RNNdim
-        self.RNN=torch.nn.RNN(input_size, hidden_size, bias=False)
+        self.RNN = torch.nn.RNN(input_size, hidden_size, bias=False)
         for param in self.RNN.parameters():
             param.requires_grad = False
-        input_variance_weight = 0.5 #input-to-recurrent variance ratio
-        input_dilution_factor = 0.5 # 0.5 #average action value (uniform on {0,1})
-        print(fluctuation_strength_factor)
-        nn.init.normal_(self.RNN.weight_ih_l0, std=fluctuation_strength_factor*np.sqrt(input_variance_weight/(input_dilution_factor*input_size)))
-        nn.init.normal_(self.RNN.weight_hh_l0, std=fluctuation_strength_factor*np.sqrt((1-input_variance_weight)/hidden_size))
+        input_variance_weight = 0.5 / # input-to-recurrent variance ratio
+        input_dilution_factor = 0.5  # average action value (uniform on {0,1})
+        nn.init.normal_(self.RNN.weight_ih_l0, std=fluctuation_strength_factor *
+                        np.sqrt(input_variance_weight/(input_dilution_factor*input_size)))
+        nn.init.normal_(self.RNN.weight_hh_l0, std=fluctuation_strength_factor *
+                        np.sqrt((1-input_variance_weight)/hidden_size))
         # nn.init.orthogonal_(self.RNN.weight_ih_l0, gain=fluctuation_strength_factor*np.sqrt(input_variance_weight/(input_dilution_factor*input_size)))
         # nn.init.orthogonal_(self.RNN.weight_hh_l0, gain=fluctuation_strength_factor*np.sqrt((1-input_variance_weight)/hidden_size))
 
@@ -59,7 +60,8 @@ class Environment:
             self.seed += 1
             return self.sample_initial_state(seed=self.seed), self.T
         else:
-            _, next_state = self.RNN(torch.unsqueeze(actions.to(torch.float32),0),torch.unsqueeze(state,0))
+            _, next_state = self.RNN(torch.unsqueeze(
+                actions.to(torch.float32), 0), torch.unsqueeze(state, 0))
             return torch.squeeze(next_state), self.counter
 
     def sample_initial_state(self, seed=0):

@@ -13,6 +13,8 @@ parser = argparse.ArgumentParser(description='data generation parameters')
 parser.add_argument('--stablefac', type=float,
                     default=2, help='stability factor')
 args = parser.parse_args()
+
+
 def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_label):
 
     # assign system parameters
@@ -46,7 +48,8 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
 
     # Initialize environment
     dummy_seed = 1
-    env = Environment(state_space_dim, num_agents, epsiode_length, fluctuation_strength_factor=fluctuation_strength_factor, start_seed=dummy_seed)
+    env = Environment(state_space_dim, num_agents, epsiode_length,
+                      fluctuation_strength_factor=fluctuation_strength_factor, start_seed=dummy_seed)
 
     # rollout model into a dataset of trajectories
     for seed in seedlist:
@@ -56,10 +59,10 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
         joint_action_seq = []
         env.state = env.sample_initial_state(seed=seed)
 
-        #warmup
+        # warmup
         for step in range(num_warmup_steps):
             observed_state = env.state[:state_space_dim]
-            action_probability_vectors = model.forward(observed_state)
+            action_probability_vectors = torch.squeeze(model.forward(torch.unsqueeze(observed_state,dim=0)),dim=0)
             if action_selection == 'greedy':  # take greedy action
                 actions = torch.argmax(action_probability_vectors, dim=-1)
             else:  # sample
@@ -71,7 +74,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
 
             observed_state = env.state[:state_space_dim]
             state_seq.append(observed_state.detach().cpu().numpy())
-            action_probability_vectors = model.forward(observed_state)
+            action_probability_vectors = torch.squeeze(model.forward(torch.unsqueeze(observed_state,dim=0)),dim=0)
 
             if action_selection == 'greedy':  # take greedy action
                 actions = torch.argmax(action_probability_vectors, dim=-1)
@@ -85,7 +88,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
         sim_data["times"] = np.array(episode_time_indices)
         sim_data["states"] = np.array(state_seq)
         sim_data["actions"] = np.array(joint_action_seq)
-        filename=f'{output_filename}_dataseed_{seed}.npy'
+        filename = f'{output_filename}_dataseed_{seed}.npy'
         print('saving '+filename)
         np.save(filename, sim_data)
 
@@ -99,8 +102,10 @@ if __name__ == '__main__':
 
     sys_parameters = {}
     sys_parameters['N'] = 4  # agents
-    sys_parameters['K'] = int(5*np.log2(sys_parameters['N'])) #2^K states so 2^{K+1} possible single agent policies. Here, set so 10*N number of policies >> N  # state space 
-    sys_parameters['fluctuation_strength_factor'] = args.stablefac  # stability transition control parameter
+    # 2^K states so 2^{K+1} possible single agent policies. Here, set so 10*N number of policies >> N  # state space
+    sys_parameters['K'] = int(5*np.log2(sys_parameters['N']))
+    # stability transition control parameter
+    sys_parameters['fluctuation_strength_factor'] = args.stablefac
     # number of discrete actions; fixed to 2 for simplicity
     sys_parameters['action_space_dim'] = 2
 
@@ -108,7 +113,7 @@ if __name__ == '__main__':
     jointagent_groundmodel_paras['modelname'] = groundmodel_name
 
     if groundmodel_name == "bitpop":
-        jointagent_groundmodel_paras["corr"] = 1.0  # action pair correlation
+        jointagent_groundmodel_paras["corr"] = 0.8  # action pair correlation
         jointagent_groundmodel_paras['ensemble'] = 'sum'
         jointagent_groundmodel_paras['M'] = 2  # number of agent groups
         assert (sys_parameters['N']/jointagent_groundmodel_paras['M']).is_integer(), \
