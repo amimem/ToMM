@@ -17,9 +17,9 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    # default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
+                    default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
                     # default='singletaskbaseline', help='Name of the model')
-                    default='multitaskbaseline', help='Name of the model')
+                    # default='multitaskbaseline', help='Name of the model')
 parser.add_argument('--hidden_capacity', type=int,
                     default=240, help='capacity of abstract joint policy space')
 parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
