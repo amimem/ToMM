@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from utils import get_gumbel_softmax_sample, MultiChannelNet
-
+import numpy as np
 
 class STOMPnet(nn.Module):
     """
@@ -23,13 +23,13 @@ class STOMPnet(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2):
+    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim = 2):
         super(STOMPnet, self).__init__()
 
         # Define the encoder, decoder, and assigner
         self.sample_from_abstract_joint_policy = Encoder(
             state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
-        self.ground_joint_policy = Decoder(num_agents, action_space_dim)
+        self.ground_joint_policy = Decoder(num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim)
         self.assigner = Assigner(num_abs_agents, num_agents)
 
     def forward(self, state):
@@ -105,8 +105,9 @@ class Encoder(nn.Module):
         logit_vectors = self.abstract_agent_policy_networks(state)
         one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
         # convert from sparse (onehot) to dense (index) representation
-        abstract_actions = torch.argmax(one_hot_vectors, dim=-1)
-        return abstract_actions
+        # abstract_actions = torch.argmax(one_hot_vectors, dim=-1)
+        # return abstract_actions
+        return one_hot_vectors
 
 
 class Decoder(nn.Module):
@@ -125,7 +126,7 @@ class Decoder(nn.Module):
         shared_ground_agent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
     """
 
-    def __init__(self, num_agents, action_space_dim=2, hidden_layer_width=256, agent_embedding_dim=256):
+    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, hidden_layer_width=256):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
@@ -134,7 +135,8 @@ class Decoder(nn.Module):
             num_embeddings=num_agents, embedding_dim=agent_embedding_dim)
 
         # initialize policies. Input dimension is (batch_size, 1 (abstract action index) + embed_dim).
-        state_space_dim = 1 + agent_embedding_dim
+        abs_action_dim = abs_action_space_dim #1
+        state_space_dim = abs_action_dim + agent_embedding_dim
         self.shared_ground_agent_policy_network = MultiChannelNet(
             n_channels=1,
             input_size=state_space_dim,
@@ -156,13 +158,17 @@ class Decoder(nn.Module):
             torch.Tensor: Action logit vectors.
         """
         batch_size = abs_actions.shape[0]
-        assigned_abstract_actions = torch.stack(
-            [abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(batch_size)], dim=0)
+        # assigned_abstract_actions = torch.stack(
+        #     [abs_actions[idx][abstract_agent_assignments[idx]] for idx in range(batch_size)], dim=0)
+        assigned_abstract_actions = torch.matmul(abstract_agent_assignments,abs_actions)
+        #abs_actions: (batch_size, num_abs_agents, abs action space dim)
+        #abstract_agent_assignments: (batch_size, num_agents, num_abs_agents)
+        #assigned_abstract_actions: (batch_size, num_agents, abs action space dim)
 
         # run decoder network in parallel over all ground agents
         repeat_dims = (batch_size, 1, 1)
         parallel_input = torch.cat([
-            torch.unsqueeze(assigned_abstract_actions, dim=-1),
+            assigned_abstract_actions,
             torch.unsqueeze(self.ground_agent_embedding.weight,
                             dim=0).repeat(repeat_dims)
         ], dim=-1)
@@ -199,6 +205,7 @@ class Assigner(nn.Module):
         one_hot_assignment_array = get_gumbel_softmax_sample(
             self.abs_agent_assignment_embedding.weight.repeat(repeat_dims))
 
-        abstract_agent_assignments = torch.argmax(
-            one_hot_assignment_array, dim=-1)
-        return abstract_agent_assignments
+        # abstract_agent_assignments = torch.tensor(np.array([0,0,1,1]),dtype=torch.int32).repeat((batch_size,1))
+        # abstract_agent_assignments = torch.argmax(one_hot_assignment_array, dim=-1)
+        # return abstract_agent_assignments
+        return one_hot_assignment_array

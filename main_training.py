@@ -18,18 +18,18 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
                     default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
-                    # default='singletaskbaseline', help='Name of the model')
-                    # default='multitaskbaseline', help='Name of the model')
+# default='singletaskbaseline', help='Name of the model')
+# default='multitaskbaseline', help='Name of the model')
 parser.add_argument('--hidden_capacity', type=int,
                     default=240, help='capacity of abstract joint policy space')
-parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
+parser.add_argument('--epochs', type=int, default=5, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
-                    default=1e-3, help='Learning rate')
+                    default=1e-2, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_filename', type=str,
-                    default='_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_10000_g_9.0', help='Data filename')
+                    default='_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_10000_g_8.0', help='Data filename')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
@@ -115,7 +115,8 @@ if __name__ == '__main__':
             enc_hidden_dim,
             num_agents,
             num_abs_agents,
-            action_space_dim=action_space_dim
+            action_space_dim=action_space_dim,
+            agent_embedding_dim = agent_embedding_dim
         )
     elif model_paras['model_name'] == 'singletaskbaseline':
         assert (args.hidden_capacity /
@@ -142,9 +143,9 @@ if __name__ == '__main__':
     # criterion = nn.BCEWithLogitsLoss() #since actions are binary
 
     optimizer = optim.Adam(net.parameters(), lr=learning_rate)
-
     logging_loss = []
     logging_acc = []
+    num_action_samples = len(train_loader)*batch_size*num_agents
     for epoch in range(epochs):
         running_loss = 0.0
         running_correct = 0.0
@@ -153,20 +154,35 @@ if __name__ == '__main__':
             inputs = inputs.to(device)
             labels = labels.float().to(device)
             optimizer.zero_grad()
+
             # output is (batchsize, number of agents, action space size)
             action_logit_vectors = net(inputs)
+            max_scores, max_idx_class = action_logit_vectors.max(dim=2)
+
+            one_agent_loss = torch.squeeze(action_logit_vectors[:, 0, :])
+            loss = criterion(one_agent_loss, labels.type(
+                torch.LongTensor)[:, 0])
             # sum loss over agents (criterion function sums loss over samples in batch)
-            loss = sum(criterion(torch.squeeze(action_logit_vectors[:, agent_idx, :]), labels.type(
-                torch.LongTensor)[:, agent_idx]) for agent_idx in range(num_agents))
+            # loss = torch.sum(criterion(torch.squeeze(action_logit_vectors[:, agent_idx, :]), labels.type(
+                # torch.LongTensor)[:, agent_idx]) for agent_idx in range(num_agents))
+            # if model_paras['model_name'] == 'STOMPnet':
+            #     # add l1 regularization of assigner probabilities
+            #     assigner_logits = net.state_dict(
+            #     )["assigner.abs_agent_assignment_embedding.weight"]
+            #     assigner_probs = F.softmax(assigner_logits,dim=-1)
+            #     lambda1 = 10
+            #     l1_regularization_of_assigner_probs = sum(lambda1 * \
+            #         torch.norm(assigner_probs, p=1,dim=-1))
+            #     loss = loss + l1_regularization_of_assigner_probs
 
             loss.backward()
             optimizer.step()
+
             running_loss += loss.item()
-            max_scores, max_idx_class = net(inputs).max(dim=2)
             running_correct += (labels == max_idx_class).sum().item()
-        epoch_accuracy = running_correct / \
-            (len(train_loader)*batch_size*num_agents)
-        epoch_loss = running_loss/(len(train_loader)*batch_size*num_agents)
+
+        epoch_accuracy = running_correct / num_action_samples
+        epoch_loss = running_loss / num_action_samples
 
         print(f"Epoch {epoch+1}, loss: {epoch_loss:.5}, acc: {epoch_accuracy:.5}", flush=True)
         logging_loss.append(epoch_loss)
