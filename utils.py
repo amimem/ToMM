@@ -25,7 +25,7 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
 class MultiChannelNet(nn.Module):
     """
     Implements a 2D module array architecture. Each row is a channel. Parameters refer to architecture of individual channels.
-    Dimensions of output: (n_channels, output_size), unless specified using input argument output_dim.
+    Dimensions of output: (batch_size, n_channels, output_size), unless specified using input argument output_dim.
 
     Args:
         n_channels (int, optional): Number of channels. Defaults to 1.
@@ -59,7 +59,9 @@ class MultiChannelNet(nn.Module):
                 state (torch.Tensor): Input state tensor of dimension (batch_size, statespace_dim).
 
             Returns:
-                torch.Tensor: Output tensor after passing through the model.
+                torch.Tensor: Output tensor after passing through the model. 
+                dimension (batch_size, nchannels, output size) for nchannels>1
+                          (batch_size, output size) if channels = 1
             """
             logit_vectors = []
             for channel_idx in range(self.n_channels):

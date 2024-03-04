@@ -3,13 +3,40 @@
 # Change to the directory containing the Python script
 # cd /mnt/c/Users/maxpu/Dropbox/scripts/Projects/MARL/marl/gumbel_partition
 
-# Run the Python script
+# data paras
+N=4
+T=10000
+corr=0.2
+M=2
 factors=(1 2 4 8 16)
+factor=8
 for factor in "${factors[@]}"; do
-	python -u -W ignore main_data_generation.py --stablefac "$factor"
-	for model in "STOMPnet_M_2_L_4_nfeatures_2" "singletaskbaseline" "multitaskbaseline"; do
-		python -u -W ignore main_training.py --model_name "$model" --data_filename "_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_10000_g_"$factor".0"
-	done
+# # FILEdata=_4agentdebug_modelname_bitpop_corr_"$corr"_ensemble_sum_M_"$M"_simulationdata_actsel_greedy_numepi_1_K_"$K"_N_"$N"_T_"$T"_g_"$factor".0
+# # if [ -f "output/$FILEdata.npy" ]; then
+# #     echo "$FILEdata.npy exists."
+# # else 
+	python -u -W ignore main_data_generation.py --stablefac "$factor" --N "$N" --T "$T" --corr "$corr" --M "$M"
+# # fi
 done
+
+#training paras
+lr=0.01
+epochs=5
+for model in "STOMPnet_M_2_L_4_nfeatures_2" "singletaskbaseline" "multitaskbaseline"; do
+	FILEtrain=_"$model"_cap_240_trainseed_0_epochs_"$epochs"_batchsz_16_lr_"$lr"
+	# if [ -f "output/$FILEdata$FILEtrain.npy" ]; then
+	    # echo "$FILEdata$FILEtrain.npy exists."
+	# else 
+	python -u -W ignore main_training.py --model_name "$model" --data_filename "$FILEdata" --learning_rate "$lr" --epochs "$epochs"
+	# fi
+done
+
+# for factor in "${factors[@]}"; do
+# 	python -u -W ignore main_training.py --model_name "multitaskbaseline" --data_filename "_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_10000_g_"$factor".0"
+# done
+
+# for model in "singletaskbaseline" "multitaskbaseline"; do
+# 	python -u -W ignore main_training.py --model_name "$model" --data_filename "_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_10000_g_8.0"
+# done
 
 

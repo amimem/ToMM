@@ -7,11 +7,19 @@ import os
 import argparse
 from Environment import Environment
 from GroundModelJointPolicy import GroundModelJointPolicy
-
+import time
 
 parser = argparse.ArgumentParser(description='data generation parameters')
 parser.add_argument('--stablefac', type=float,
-                    default=2, help='stability factor')
+                    default=8.0, help='stability factor')
+parser.add_argument('--T', type=int,
+                    default=1000, help='episode length')
+parser.add_argument('--corr', type=float,
+                    default=1.0, help='action correlation')
+parser.add_argument('--N', type=int,
+                    default=4, help='number of agents')
+parser.add_argument('--M', type=int,
+                    default=4, help='number of agent groups')
 args = parser.parse_args()
 
 
@@ -52,6 +60,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
                       fluctuation_strength_factor=fluctuation_strength_factor, start_seed=dummy_seed)
 
     # rollout model into a dataset of trajectories
+    st = time.time()
     for seed in seedlist:
         print(f"running seed {seed} of {len(seedlist)}")
         episode_time_indices = []
@@ -91,7 +100,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
         filename = f'{output_filename}_dataseed_{seed}.npy'
         print('saving '+filename)
         np.save(filename, sim_data)
-
+    print('took '+str(time.time()-st))
 
 if __name__ == '__main__':
 
@@ -101,9 +110,10 @@ if __name__ == '__main__':
     groundmodel_name = "bitpop"
 
     sys_parameters = {}
-    sys_parameters['N'] = 4  # agents
-    # 2^K states so 2^{K+1} possible single agent policies. Here, set so 10*N number of policies >> N  # state space
-    sys_parameters['K'] = int(5*np.log2(sys_parameters['N']))
+    sys_parameters['N'] = args.N  # agents
+    # 2^K states so 2^{K+1}possible single agent policies. Here, set so 10*N number of policies >> N  # state space
+    sys_parameters['K'] = 10 #int(5*np.log2(np.log2(sys_parameters['N'])))
+    print("setting state space K=5*log2(log2(N))="+str(sys_parameters['K'])+" dimensions (2^K="+str(2**sys_parameters['K'])+' possible observations)')
     # stability transition control parameter
     sys_parameters['fluctuation_strength_factor'] = args.stablefac
     # number of discrete actions; fixed to 2 for simplicity
@@ -113,9 +123,9 @@ if __name__ == '__main__':
     jointagent_groundmodel_paras['modelname'] = groundmodel_name
 
     if groundmodel_name == "bitpop":
-        jointagent_groundmodel_paras["corr"] = 0.8  # action pair correlation
+        jointagent_groundmodel_paras["corr"] = args.corr  # action pair correlation
         jointagent_groundmodel_paras['ensemble'] = 'sum'
-        jointagent_groundmodel_paras['M'] = 2  # number of agent groups
+        jointagent_groundmodel_paras['M'] = args.M  # number of agent groups
         assert (sys_parameters['N']/jointagent_groundmodel_paras['M']).is_integer(), \
             "number of agents groups should divide total number of agents for some groundmodels"
 
@@ -125,7 +135,7 @@ if __name__ == '__main__':
 
     sim_parameters = {}
     sim_parameters['actsel'] = 'greedy'
-    sim_parameters['episode_length'] = 10000
+    sim_parameters['episode_length'] = args.T
     sim_parameters['num_episodes'] = 1
     sim_parameters['num_seeds'] = 2
 

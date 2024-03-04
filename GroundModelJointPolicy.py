@@ -4,8 +4,17 @@ import numpy as np
 from numpy import random
 import itertools
 
+def binary2index(var):
+        if var.ndim == 1:
+            return np.sum(np.power(2, np.arange(len(var))) * var).astype(int)
+        elif var.ndim == 2:
+            return np.sum(
+                np.power(2, np.arange(var.shape[0]))[:, np.newaxis] * var, axis=0
+            ).astype(int)
+        else:
+            print("why more than 2 dimensions?")
 
-class GroundModelJointPolicy():
+class GroundModelJointPolicy:
     """
     A class representing a joint policy for ground-level agents in a multi-agent reinforcement learning setting.
     The observation is the index of the state space orthant (indexed in binary in state_set) containing the current state.
@@ -35,7 +44,8 @@ class GroundModelJointPolicy():
 
         self.num_agents = num_agents
         self.state_set = np.array([np.array(l) for l in list(map(list, itertools.product(
-            [0, 1], repeat=state_space_dim)))])  # all vertices of unit hypercube
+            [0, 1], repeat=state_space_dim)))],dtype=bool)  # all vertices of unit hypercube
+        self.state_set = [binary2index(var) for var in self.state_set]
         self.num_states = len(self.state_set)
         self.action_space_dim = action_space_dim
 
@@ -88,8 +98,8 @@ class GroundModelJointPolicy():
             torch.Tensor: The action probability vectors.
 
         """
-        state_idx = self.get_state_idx(state.detach().cpu().numpy())
-        # the following is for actionspace_dim=2 only
+        state_idx = self.get_state_idx(state)
+        # the following is for actionspace_dim=2 and deterministic policies
         action_0_probabilities = self.action_policies[:, state_idx][:, None]
         action_probability_vectors = np.hstack(
             (action_0_probabilities, ~action_0_probabilities))
@@ -106,4 +116,5 @@ class GroundModelJointPolicy():
             int: The index of the closest state.
 
         """
-        return np.argmin(np.linalg.norm(self.state_set-(state[None, :] > 0), axis=1))
+        # print((np.array(state[0]) > 0).shape)
+        return self.state_set.index(binary2index((np.array(state[0]) > 0)))
