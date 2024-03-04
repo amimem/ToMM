@@ -112,7 +112,7 @@ if __name__ == '__main__':
     sys_parameters = {}
     sys_parameters['N'] = args.N  # agents
     # 2^K states so 2^{K+1}possible single agent policies. Here, set so 10*N number of policies >> N  # state space
-    sys_parameters['K'] = 10 #int(5*np.log2(np.log2(sys_parameters['N'])))
+    sys_parameters['K'] = int(5*np.log2(np.log2(sys_parameters['N'])))
     print("setting state space K=5*log2(log2(N))="+str(sys_parameters['K'])+" dimensions (2^K="+str(2**sys_parameters['K'])+' possible observations)')
     # stability transition control parameter
     sys_parameters['fluctuation_strength_factor'] = args.stablefac
