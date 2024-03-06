@@ -15,7 +15,7 @@ import warnings
 # import wandb
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-# python main_trainin.py --model_name 'STOMPnet_M_2_L_4_nfeatures_2' --epochs 20 --learning_rate 0.01 --filename '_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0'
+# python main_training.py --model_name 'STOMPnet_M_2_L_4_nfeatures_2' --epochs 20 --learning_rate 0.01 --filename '_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0'
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
                     # default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
