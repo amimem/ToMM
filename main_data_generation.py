@@ -32,18 +32,18 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
     action_space_dim = sys_parameters['action_space_dim']
 
     # assign sim parameters
-    epsiode_length = sim_parameters['episode_length']
+    episode_length = sim_parameters['episode_length']
     num_episodes = sim_parameters['num_episodes']
     action_selection = sim_parameters['actsel']
 
-    output_filename = f"{output_path}_{dataset_label}_simulationdata_actsel_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{epsiode_length}_g_{fluctuation_strength_factor}"
+    output_filename = f"{output_path}_{dataset_label}_simulationdata_actsel_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{episode_length}_g_{fluctuation_strength_factor}"
     sim_parameters["dataset_label"] = dataset_label
     sim_parameters['sys_parameters'] = sys_parameters
     np.save(output_filename+'.npy', sim_parameters)
 
     # assign data generation parameters
     seedlist = range(sim_parameters['num_seeds'])
-    num_steps = sim_parameters['num_episodes']*epsiode_length
+    num_steps = sim_parameters['num_episodes']*episode_length
     num_warmup_steps = 100
 
     # Initialize Groundmodel
@@ -56,7 +56,7 @@ def generate_system_data(sys_parameters, sim_parameters, output_path, dataset_la
 
     # Initialize environment
     dummy_seed = 1
-    env = Environment(state_space_dim, num_agents, epsiode_length,
+    env = Environment(state_space_dim, num_agents, episode_length,
                       fluctuation_strength_factor=fluctuation_strength_factor, start_seed=dummy_seed)
 
     # rollout model into a dataset of trajectories
