@@ -18,14 +18,14 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # python main_trainin.py --model_name 'STOMPnet_M_2_L_4_nfeatures_2' --epochs 20 --learning_rate 0.01 --filename '_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0'
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    # default='STOMPnet_M_2_L_4_nfeatures_2', help='Name of the model')
-                    default='singletaskbaseline', help='Name of the model')
-                    # default='multitaskbaseline', help='Name of the model')
+                    default='STOMPnet_M_2_L_2_nfeatures_4', help='Name of the model')
+# default='singletaskbaseline', help='Name of the model')
+# default='multitaskbaseline', help='Name of the model')
 parser.add_argument('--hidden_capacity', type=int,
                     default=240, help='capacity of abstract joint policy space')
 parser.add_argument('--epochs', type=int, default=20, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
-                    default=1e-2, help='Learning rate')
+                    default=5e-5, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
@@ -85,17 +85,22 @@ if __name__ == '__main__':
     actions = data["actions"]
 
     # A synthethic dataset of randomly sample joint actions, one for each possible observation
-    import itertools
-    samples_per_state = 1
-    state_space_dim=10
-    num_agents = 4
-    states = np.array([np.array(l) for l in list(map(list, itertools.product(
-            [0., 1.], repeat=state_space_dim)))]).astype(np.single)
-    actions = np.random.randint(
-                        0, 2, [len(states), num_agents]).astype(int)
-    states = np.tile(states, reps=(samples_per_state,1))
-    actions = np.tile(actions, reps=(samples_per_state,1))
-
+    syn_data = True
+    if syn_data:
+        import itertools
+        state_space_dim = 10
+        num_agents = 4
+        action_space_dim = 2
+        M = 2
+        states = np.array([np.array(l) for l in list(map(list, itertools.product(
+            range(action_space_dim), repeat=state_space_dim)))]).astype(np.single)
+        actions = np.random.randint(
+            0, action_space_dim, [len(states), M]).astype(int)
+        actions = np.vstack(
+            (actions[:, 0], actions[:, 0], actions[:, 1], actions[:, 1])).T
+        samples_per_state = 10
+        states = np.tile(states, reps=(samples_per_state, 1))
+        actions = np.tile(actions, reps=(samples_per_state, 1))
 
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -157,10 +162,12 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()  # takes logits
     # criterion = nn.BCEWithLogitsLoss() #since actions are binary
 
+    num_action_samples = len(train_loader)*batch_size*num_agents
+
     # evaluate pretraining loss
     pre_training_loss = 0
     pre_training_accuracy = 0
-    num_action_samples = len(train_loader)*batch_size*num_agents
+
     for i, data_batch in enumerate(train_loader, 0):
         inputs, labels = data_batch
         inputs = inputs.to(device)
@@ -176,6 +183,7 @@ if __name__ == '__main__':
     optimizer = optim.Adam(net.parameters(), lr=learning_rate)
     logging_loss = []
     logging_acc = []
+    last_loss = 0
     for epoch in range(epochs):
         running_loss = 0.0
         running_correct = 0.0
@@ -187,7 +195,6 @@ if __name__ == '__main__':
 
             # output is (batchsize, number of agents, action space size)
             action_logit_vectors = net(inputs)
-            max_scores, max_idx_class = action_logit_vectors.max(dim=2)
 
             loss = sum(criterion(torch.squeeze(
                 action_logit_vectors[:, agent_idx, :]), labels[:, agent_idx]) for agent_idx in range(num_agents))
@@ -205,14 +212,19 @@ if __name__ == '__main__':
             optimizer.step()
 
             running_loss += loss.item()
+            max_scores, max_idx_class = action_logit_vectors.max(dim=-1)
             running_correct += (labels == max_idx_class).sum().item()
 
         epoch_accuracy = running_correct / num_action_samples
         epoch_loss = running_loss / num_action_samples
-
+        if np.isclose(last_loss, epoch_loss):
+            print("loss not changing")
+            break
+        last_loss = epoch_loss
         print(f"Epoch {epoch+1}, loss: {epoch_loss:.8}, acc: {epoch_accuracy:.8}", flush=True)
         logging_loss.append(epoch_loss)
         logging_acc.append(epoch_accuracy)
+
         # wandb.log({"epoch": epoch+1, "loss": epoch_loss})
 
     training_data = {}
@@ -226,7 +238,7 @@ if __name__ == '__main__':
     store_dict['training_data'] = training_data
     training_run_info = f"_{args.model_name}_cap_{args.hidden_capacity}_trainseed_{seed}_epochs_{epochs}_batchsz_{batch_size}_lr_{args.learning_rate}"
     print("saving " + training_run_info)
-    np.save(outdir + data_filename +
+    np.save(outdir + 'lossgoesdownexample'+data_filename +
             training_run_info + ".npy", store_dict)
 
     torch.save(net.state_dict(), outdir +
