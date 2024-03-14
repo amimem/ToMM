@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import Sampler
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,8 +17,8 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # python main_training.py --model_name 'STOMPnet_M_2_L_4_nfeatures_2' --epochs 20 --learning_rate 0.01 --filename '_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0'
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    default='STOMPnet_M_2_L_2_nfeatures_4', help='Name of the model')
-# default='singletaskbaseline', help='Name of the model')
+                    # default='STOMPnet_M_2_L_2_nfeatures_2', help='Name of the model')
+default='singletaskbaseline', help='Name of the model')
 # default='multitaskbaseline', help='Name of the model')
 parser.add_argument('--hidden_capacity', type=int,
                     default=240, help='capacity of abstract joint policy space')
@@ -30,7 +29,8 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_filename', type=str,
-                    default='_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0', help='Data filename')
+                    default='_4agentdebug_modelname_hardcode_M_2_simulationdata_actsel_greedy_numepi_1_K_3_N_4_T_256_sps_32', help='Data filename')
+                    # default='_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0', help='Data filename')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
@@ -41,7 +41,6 @@ args = parser.parse_args()
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device", flush=True)
-
 seed: int = args.seed
 torch.manual_seed(seed)
 np.random.seed(seed)
@@ -83,24 +82,6 @@ if __name__ == '__main__':
                    allow_pickle=True).item()
     states = data["states"]
     actions = data["actions"]
-
-    # A synthethic dataset of randomly sample joint actions, one for each possible observation
-    syn_data = True
-    if syn_data:
-        import itertools
-        state_space_dim = 10
-        num_agents = 4
-        action_space_dim = 2
-        M = 2
-        states = np.array([np.array(l) for l in list(map(list, itertools.product(
-            range(action_space_dim), repeat=state_space_dim)))]).astype(np.single)
-        actions = np.random.randint(
-            0, action_space_dim, [len(states), M]).astype(int)
-        actions = np.vstack(
-            (actions[:, 0], actions[:, 0], actions[:, 1], actions[:, 1])).T
-        samples_per_state = 10
-        states = np.tile(states, reps=(samples_per_state, 1))
-        actions = np.tile(actions, reps=(samples_per_state, 1))
 
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -167,7 +148,6 @@ if __name__ == '__main__':
     # evaluate pretraining loss
     pre_training_loss = 0
     pre_training_accuracy = 0
-
     for i, data_batch in enumerate(train_loader, 0):
         inputs, labels = data_batch
         inputs = inputs.to(device)
@@ -209,6 +189,9 @@ if __name__ == '__main__':
             #     loss = loss + l1_regularization_of_assigner_probs
 
             loss.backward()
+
+            # norms=torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=0.01)
+
             optimizer.step()
 
             running_loss += loss.item()

@@ -45,7 +45,9 @@ class GroundModelJointPolicy:
         self.num_agents = num_agents
         self.state_set = np.array([np.array(l) for l in list(map(list, itertools.product(
             [0, 1], repeat=state_space_dim)))],dtype=bool)  # all vertices of unit hypercube
-        self.state_set = [binary2index(var) for var in self.state_set]
+        self.state_set_inds = [binary2index(var) for var in self.state_set]
+        self.state_set = self.state_set[np.argsort(self.state_set_inds)]
+        self.state_set_inds = list(np.sort(self.state_set_inds))
         self.num_states = len(self.state_set)
         self.action_space_dim = action_space_dim
 
@@ -116,5 +118,4 @@ class GroundModelJointPolicy:
             int: The index of the closest state.
 
         """
-        # print((np.array(state[0]) > 0).shape)
-        return self.state_set.index(binary2index((np.array(state[0]) > 0)))
+        return self.state_set_inds.index(binary2index((np.array(state[0]) > 0)))
