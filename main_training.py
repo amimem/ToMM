@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
                     # default='STOMPnet_M_2_L_2_nfeatures_2', help='Name of the model')
-default='singletaskbaseline', help='Name of the model')
+                    default='singletaskbaseline', help='Name of the model')
 # default='multitaskbaseline', help='Name of the model')
 parser.add_argument('--hidden_capacity', type=int,
                     default=240, help='capacity of abstract joint policy space')
@@ -29,8 +29,8 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_filename', type=str,
-                    default='_4agentdebug_modelname_hardcode_M_2_simulationdata_actsel_greedy_numepi_1_K_3_N_4_T_256_sps_32', help='Data filename')
-                    # default='_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0', help='Data filename')
+                    default='_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_3_N_4_T_256_sps_32', help='Data filename')
+# default='_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0', help='Data filename')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
@@ -82,6 +82,8 @@ if __name__ == '__main__':
                    allow_pickle=True).item()
     states = data["states"]
     actions = data["actions"]
+
+    print(f"actions averages: {np.mean(actions,axis=0)}")
 
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)

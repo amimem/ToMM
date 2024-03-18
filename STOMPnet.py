@@ -105,6 +105,10 @@ class Encoder(nn.Module):
 
         """
         logit_vectors = self.abstract_agent_policy_networks(state)
+        num_codebooks = 10
+        assert (logit_vectors.shape[-1]/num_codebooks).is_integer(), "num_codebooks must divide encoder output"
+        num_components = int(logit_vectors.shape[-1]/num_codebooks)
+        logit_vectors = logit_vectors.reshape(logit_vectors.shape[:-1]+(num_codebooks, num_components))
         one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
         return one_hot_vectors
 
@@ -157,6 +161,7 @@ class Decoder(nn.Module):
             torch.Tensor: Action logit vectors.
         """
         batch_size = abs_actions.shape[0]
+        abs_actions = abs_actions.reshape(abs_actions.shape[:-2] + tuple([abs_actions.shape[-1]*abs_actions.shape[-2]]))
         assigned_abstract_actions = torch.matmul(
             abstract_agent_assignments, abs_actions)
         # abs_actions: (batch_size, num_abs_agents, abs action space dim)
