@@ -9,6 +9,7 @@ from Environment import Environment
 from GroundModelJointPolicy import GroundModelJointPolicy
 import time
 import itertools
+import random
 
 parser = argparse.ArgumentParser(description='data generation parameters')
 parser.add_argument('--stablefac', type=float,
@@ -187,17 +188,21 @@ if __name__ == '__main__':
         sim_parameters['episode_length'] = sys_parameters['samples_per_state']*(Adim**K)
         data_list = []
 
-        # Initialize Groundmodel
-        model = GroundModelJointPolicy(
-            num_agents,
-            state_space_dim,
-            action_space_dim=action_space_dim,
-            model_paras=sys_parameters['jointagent_groundmodel_paras']
-        )
 
         for seed in seedlist:
             print(f"running seed {seed} of {len(seedlist)}")
+            torch.manual_seed(seed)
             np.random.seed(seed)
+            random.seed(seed)
+
+            # Initialize Groundmodel
+            model = GroundModelJointPolicy(
+                num_agents,
+                state_space_dim,
+                action_space_dim=action_space_dim,
+                model_paras=sys_parameters['jointagent_groundmodel_paras']
+                )
+            
             states = np.array([np.array(l) for l in list(map(list, itertools.product(
                 range(Adim), repeat=K)))]).astype(np.single)
             actions = []
@@ -210,6 +215,7 @@ if __name__ == '__main__':
             joint_action_seq = np.tile(actions, reps=(sys_parameters['samples_per_state'], 1))
             episode_time_indices = np.arange(sim_parameters['episode_length'])
             sim_data = {}
+            sim_data["seed"] = seed
             sim_data["times"] = episode_time_indices
             shuffled_inds=np.random.permutation(sim_parameters['episode_length'])
             sim_data["states"] = state_seq[shuffled_inds]
@@ -218,7 +224,7 @@ if __name__ == '__main__':
         output_filename = f"{output_path}_{dataset_label}_simulationdata_actsel_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{sim_parameters['episode_length']}_sps_{sys_parameters['samples_per_state']}"
 
     for sit,sim_data in enumerate(data_list):
-        filename = f'{output_filename}_dataseed_{seedlist[sit]}.npy'
+        filename = f'{output_filename}_dataseed_{sim_data["seed"]}.npy'
         print('saving '+filename)
         np.save(filename, sim_data)  
     
