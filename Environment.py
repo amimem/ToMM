@@ -76,6 +76,6 @@ class Environment:
             torch.Tensor: Initial state.
         """
         # make sure the random seed set here does not interfere with the random seed set in the main_training.py file
-        random.seed(seed)
+        np.random.seed(seed)
         # Sample an initial state from a squashed Gaussian distribution
         return F.tanh(torch.Tensor(np.random.randn(self.RNNdim)))
