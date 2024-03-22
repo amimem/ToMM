@@ -26,6 +26,8 @@ parser.add_argument('--M', type=int,
                     default=2, help='number of agent groups')
 parser.add_argument('--K', type=int,
                     default=3, help='number of agent groups')
+parser.add_argument('--output', type=str,
+                    default='output/', help='output directory')
 args = parser.parse_args()
 
 
@@ -132,7 +134,7 @@ def generate_system_data(sys_parameters, sim_parameters, warmup=False):
 
 if __name__ == '__main__':
 
-    output_path = os.path.join(os.getcwd(), 'output/')
+    output_path = os.path.join(os.getcwd(), args.output)
 
     dataset_label = "4agentdebug"
 
