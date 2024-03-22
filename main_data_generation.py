@@ -45,7 +45,7 @@ def generate_system_data(sys_parameters, sim_parameters):
 
     # assign data generation parameters
     seedlist = range(sim_parameters['num_seeds'])
-    num_steps = sim_parameters['num_episodes']*episode_length
+    num_steps = num_episodes*episode_length
     num_warmup_steps = 100
 
     dummy_seed = 1
