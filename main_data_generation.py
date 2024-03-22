@@ -48,6 +48,13 @@ def generate_system_data(sys_parameters, sim_parameters):
     num_steps = sim_parameters['num_episodes']*episode_length
     num_warmup_steps = 100
 
+    dummy_seed = 1
+
+    # set seeds for reproducibility
+    torch.manual_seed(dummy_seed)
+    np.random.seed(dummy_seed)
+    random.seed(dummy_seed)
+
     # Initialize Groundmodel
     model = GroundModelJointPolicy(
         num_agents,
@@ -57,7 +64,6 @@ def generate_system_data(sys_parameters, sim_parameters):
     )
 
     # Initialize environment
-    dummy_seed = 1
     env = Environment(state_space_dim, num_agents, episode_length,
                       fluctuation_strength_factor=fluctuation_strength_factor, start_seed=dummy_seed)
 
