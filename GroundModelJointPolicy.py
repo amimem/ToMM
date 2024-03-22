@@ -51,7 +51,8 @@ class GroundModelJointPolicy:
         self.num_states = len(self.state_set)
         self.action_space_dim = action_space_dim
 
-        rng = np.random.default_rng()
+        seed = model_paras['seed']
+        rng = np.random.default_rng(seed=seed)
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
 

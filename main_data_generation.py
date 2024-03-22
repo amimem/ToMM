@@ -20,12 +20,14 @@ parser.add_argument('--T', type=int,
                     default=1000, help='episode length')
 parser.add_argument('--corr', type=float,
                     default=1.0, help='action correlation')
+parser.add_argument('--A', type=int,
+                    default=2, help='number of actions')
 parser.add_argument('--N', type=int,
-                    default=4, help='number of agents')
+                    default=4, help='number of ground agents')
 parser.add_argument('--M', type=int,
-                    default=2, help='number of agent groups')
+                    default=2, help='number of abstract agents')
 parser.add_argument('--K', type=int,
-                    default=3, help='number of agent groups')
+                    default=3, help='state space dimension')
 parser.add_argument('--output', type=str,
                     default='output/', help='output directory')
 args = parser.parse_args()
@@ -137,6 +139,7 @@ if __name__ == '__main__':
 
     output_path = os.path.join(os.getcwd(), args.output)
 
+    # remove
     dataset_label = "4agentdebug"
 
     sys_parameters = {}
@@ -200,11 +203,12 @@ if __name__ == '__main__':
 
         for seed in seedlist:
             print(f"running seed {seed} of {len(seedlist)}")
-            torch.manual_seed(seed)
-            np.random.seed(seed)
-            random.seed(seed)
+
+            rng = np.random.default_rng(seed=seed)
+            jointagent_groundmodel_paras['seed'] = seed
 
             # Initialize Groundmodel
+            torch.manual_seed(seed)
             model = GroundModelJointPolicy(
                 num_agents,
                 state_space_dim,
@@ -226,7 +230,7 @@ if __name__ == '__main__':
             sim_data = {}
             sim_data["seed"] = seed
             sim_data["times"] = episode_time_indices
-            shuffled_inds=np.random.permutation(sim_parameters['episode_length'])
+            shuffled_inds= rng.permutation(sim_parameters['episode_length'])
             sim_data["states"] = state_seq[shuffled_inds]
             sim_data["actions"] = joint_action_seq[shuffled_inds]
             data_list.append(sim_data)
