@@ -29,7 +29,7 @@ parser.add_argument('--K', type=int,
 args = parser.parse_args()
 
 
-def generate_system_data(sys_parameters, sim_parameters):
+def generate_system_data(sys_parameters, sim_parameters, warmup=False):
     
 
     # assign system parameters
@@ -72,7 +72,7 @@ def generate_system_data(sys_parameters, sim_parameters):
     data_list = []
     for seed in seedlist:
         print(f"running seed {seed} of {len(seedlist)}")
-        if True:
+        if not warmup:
             np.random.seed(seed)
             M = sys_parameters['jointagent_groundmodel_paras']['M']
             K = sys_parameters['K']
