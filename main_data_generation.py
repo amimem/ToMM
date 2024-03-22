@@ -92,7 +92,6 @@ def generate_system_data(sys_parameters, sim_parameters, warmup=False):
             episode_time_indices = np.arange(samples_per_state*Adim**K)
             sim_parameters['sys_parameters'] = sys_parameters
             sim_parameters['seed'] = seed
-            np.save(output_filename+'.npy', sim_parameters)
         else:
             episode_time_indices = []
             state_seq = []
