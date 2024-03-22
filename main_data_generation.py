@@ -91,6 +91,7 @@ def generate_system_data(sys_parameters, sim_parameters, warmup=False):
             joint_action_seq = np.tile(actions, reps=(samples_per_state, 1))
             episode_time_indices = np.arange(samples_per_state*Adim**K)
             sim_parameters['sys_parameters'] = sys_parameters
+            sim_parameters['seed'] = seed
             np.save(output_filename+'.npy', sim_parameters)
         else:
             episode_time_indices = []
@@ -127,6 +128,7 @@ def generate_system_data(sys_parameters, sim_parameters, warmup=False):
         sim_data["times"] = np.array(episode_time_indices)
         sim_data["states"] = np.array(state_seq)
         sim_data["actions"] = np.array(joint_action_seq)
+        sim_data["seed"] = seed
 
         data_list.append(sim_data)
     print('took '+str(time.time()-st))
