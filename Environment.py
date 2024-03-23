@@ -69,13 +69,12 @@ class Environment:
         Samples an initial state from a uniform distribution.
 
         Args:
-            state_space_dim (int): Dimension of the state space.
             seed (int): Seed for random number generation.
 
         Returns:
             torch.Tensor: Initial state.
         """
         # make sure the random seed set here does not interfere with the random seed set in the main_training.py file
-        np.random.seed(seed)
+        rng = np.random.default_rng(seed=seed)
         # Sample an initial state from a squashed Gaussian distribution
-        return F.tanh(torch.Tensor(np.random.randn(self.RNNdim)))
+        return F.tanh(torch.Tensor(rng.normal(loc=0, scale=1, size=(self.RNNdim,))))
