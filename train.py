@@ -3,14 +3,15 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import random
 from STOMPnet import STOMPnet
 from utils import MultiChannelNet
 import warnings
+import os
+import h5py
+import yaml
+import hashlib
 # import wandb
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -28,9 +29,8 @@ parser.add_argument('--learning_rate', type=float,
 parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
-parser.add_argument('--data_filename', type=str,
-                    default='_4agentdebug_modelname_bitpop_corr_1.0_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_3_N_4_T_256_sps_32', help='Data filename')
-# default='_4agentdebug_modelname_bitpop_corr_0.8_ensemble_sum_M_2_simulationdata_actsel_greedy_numepi_1_K_10_N_4_T_1000_g_8.0', help='Data filename')
+parser.add_argument('--data_dir', type=str,
+                    default='data_3485a734d3/', help='Data directory')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
@@ -65,21 +65,31 @@ if __name__ == '__main__':
     epochs = args.epochs
     learning_rate = args.learning_rate
     batch_size = args.batch_size
-    training_paras = {}
-    training_paras['epochs'] = epochs
-    training_paras['learning_rate'] = learning_rate
-    training_paras['batch_size'] = batch_size
-    training_paras['train_seed'] = seed
+
     print(f"seed {seed} training of {args.model_name} with capacity {args.hidden_capacity} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}")
 
     # load the data from the output folder
     outdir = args.outdir
-    data_settings = np.load(outdir + args.data_filename +
-                            '.npy', allow_pickle=True).item()
-    data_filename = args.data_filename + f'_dataseed_{args.data_seed}'
-    print("using data:"+data_filename)
-    data = np.load(outdir + data_filename + '.npy',
-                   allow_pickle=True).item()
+    data_dir = args.data_dir
+    data_filename = os.path.join(outdir, data_dir, 'data.h5')
+    config_filename = os.path.join(outdir, data_dir, 'config.yaml')
+
+    print("using data:"+ data_filename)
+
+    # load the hdf data
+    with h5py.File(data_filename, 'r') as f:
+        datasets = {}
+        for group_name, group in f.items():
+            datasets[group_name] = {key: np.array(value) for key, value in group.items()}
+    
+    # load the config file
+    with open(config_filename, 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        print(config)
+
+    data_seed = args.data_seed
+    data = datasets[f"dataset_{data_seed}"]
+
     states = data["states"]
     actions = data["actions"]
 
@@ -88,10 +98,10 @@ if __name__ == '__main__':
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    # load system parameters
-    action_space_dim = 2
-    state_space_dim = data_settings['sys_parameters']['K']
-    num_agents = data_settings['sys_parameters']['N']
+    # load parameters from config
+    action_space_dim = config["file_attrs"]["A"]
+    state_space_dim = config["file_attrs"]["K"]
+    num_agents = config["file_attrs"]["N"]
 
     # instantiate model
     model_paras = {}
@@ -218,13 +228,26 @@ if __name__ == '__main__':
 
     store_dict = {}
     store_dict['model_paras'] = model_paras
-    store_dict['training_paras'] = training_paras
-    store_dict['data_path'] = outdir + data_filename
     store_dict['training_data'] = training_data
-    training_run_info = f"_{args.model_name}_cap_{args.hidden_capacity}_trainseed_{seed}_epochs_{epochs}_batchsz_{batch_size}_lr_{args.learning_rate}"
-    print("saving " + training_run_info)
-    np.save(outdir + 'lossgoesdownexample'+data_filename +
-            training_run_info + ".npy", store_dict)
 
-    torch.save(net.state_dict(), outdir +
-               data_filename + training_run_info + "_state_dict.pt")
+    training_run_info = f"_{args.model_name}_cap_{args.hidden_capacity}_trainseed_{seed}_epochs_{epochs}_batchsize_{batch_size}_lr_{args.learning_rate}"
+    print("saving " + training_run_info)
+
+    save_dir = os.path.join(outdir, data_dir, 'training_results/')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # make a subdirectory for each run
+    hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
+    train_info_dir = os.path.join(save_dir, hash)
+    if not os.path.exists(train_info_dir):
+        os.makedirs(train_info_dir)
+
+    # save store dict as numpy
+    np.save(train_info_dir + "/results.npy", store_dict)
+    
+    # also save args as yaml
+    with open(train_info_dir + "/args.yaml", 'w') as file:
+        yaml.dump(args.__dict__, file)
+
+    torch.save(net.state_dict(), train_info_dir + "/state_dict.pt")
