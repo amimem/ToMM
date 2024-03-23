@@ -64,7 +64,7 @@ def generate_system_data(sys_parameters, sim_parameters, warmup=False):
         num_agents,
         state_space_dim,
         action_space_dim=action_space_dim,
-        model_paras=sys_parameters['jointagent_groundmodel_paras']
+        model_paras=sys_parameters['policy_params']
     )
 
     # Initialize environment
@@ -78,7 +78,7 @@ def generate_system_data(sys_parameters, sim_parameters, warmup=False):
         print(f"running seed {seed} of {len(seedlist)}")
         if not warmup:
             np.random.seed(seed)
-            M = sys_parameters['jointagent_groundmodel_paras']['M']
+            M = sys_parameters['policy_params']['M']
             K = sys_parameters['K']
             Adim = sys_parameters['action_space_dim']
             states = np.array([np.array(l) for l in list(map(list, itertools.product(
@@ -153,20 +153,20 @@ if __name__ == '__main__':
 
     groundmodel_name = "bitpop"
 
-    jointagent_groundmodel_paras = {}
-    jointagent_groundmodel_paras['modelname'] = groundmodel_name
+    policy_params = {}
+    policy_params['model_name'] = groundmodel_name
     if groundmodel_name == "bitpop":
-        jointagent_groundmodel_paras["corr"] = args.corr  # action pair correlation
-        jointagent_groundmodel_paras['ensemble'] = 'sum'
-        jointagent_groundmodel_paras['M'] = args.M  # number of agent groups
-        assert (sys_parameters['N']/jointagent_groundmodel_paras['M']).is_integer(), \
+        policy_params["corr"] = args.corr  # action pair correlation
+        policy_params['ensemble'] = 'sum'
+        policy_params['M'] = args.M  # number of agent groups
+        assert (sys_parameters['N']/policy_params['M']).is_integer(), \
             "number of agents groups should divide total number of agents for some groundmodels"
     else:
         os.abort("select an implemented groundmodel")
     # add parameter setting of ground model to label
     dataset_label += ''.join(['_'+key+'_'+str(value)
-                              for key, value in jointagent_groundmodel_paras.items()])
-    sys_parameters['jointagent_groundmodel_paras'] = jointagent_groundmodel_paras
+                              for key, value in policy_params.items()])
+    sys_parameters['policy_params'] = policy_params
 
     
     sim_parameters = {}
@@ -194,7 +194,7 @@ if __name__ == '__main__':
     else:
         # hard-coded over all states in policy function
         sys_parameters['samples_per_state'] = args.sps # batchsize
-        M = sys_parameters['jointagent_groundmodel_paras']['M']
+        M = sys_parameters['policy_params']['M']
         K = sys_parameters['K']
         Adim = sys_parameters['action_space_dim']
         sim_parameters['episode_length'] = sys_parameters['samples_per_state']*(Adim**K)
@@ -205,7 +205,7 @@ if __name__ == '__main__':
             print(f"running seed {seed} of {len(seedlist)}")
 
             rng = np.random.default_rng(seed=seed)
-            jointagent_groundmodel_paras['seed'] = seed
+            policy_params['seed'] = seed
 
             # Initialize Groundmodel
             torch.manual_seed(seed)
@@ -213,8 +213,8 @@ if __name__ == '__main__':
                 num_agents,
                 state_space_dim,
                 action_space_dim=action_space_dim,
-                model_paras=sys_parameters['jointagent_groundmodel_paras']
                 )
+            model.set_action_policies(policy_params)
             
             states = np.array([np.array(l) for l in list(map(list, itertools.product(
                 range(Adim), repeat=K)))]).astype(np.single)

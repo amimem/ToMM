@@ -1,7 +1,6 @@
 from torch import nn
 import torch
 import numpy as np
-from numpy import random
 import itertools
 
 def binary2index(var):
@@ -39,7 +38,7 @@ class GroundModelJointPolicy:
 
     """
 
-    def __init__(self, num_agents, state_space_dim, action_space_dim=2, model_paras=None):
+    def __init__(self, num_agents, state_space_dim, action_space_dim=2):
         super(GroundModelJointPolicy, self).__init__()
 
         self.num_agents = num_agents
@@ -50,45 +49,8 @@ class GroundModelJointPolicy:
         self.state_set_inds = list(np.sort(self.state_set_inds))
         self.num_states = len(self.state_set)
         self.action_space_dim = action_space_dim
-
-        seed = model_paras['seed']
-        rng = np.random.default_rng(seed=seed)
         self.action_policies = np.zeros(
             (self.num_agents, self.num_states), dtype=bool)
-
-        if model_paras['modelname'] == 'bitpop':
-
-            self.corr = model_paras['corr']
-            gen_type = model_paras['ensemble']
-            num_agent_groups = model_paras['M']
-            assert (num_agents/num_agent_groups).is_integer(
-            ), "Uneven group sizes. bitpop model requires group sizes to be equal"
-            agents_per_group = int(num_agents/num_agent_groups)
-
-            for agent_group_idx in range(num_agent_groups):
-                agent_indices = range(agent_group_idx * agents_per_group,
-                                      (agent_group_idx + 1) * agents_per_group)
-                agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
-                agent_indices_bool[agent_indices] = True
-                if (gen_type == "mix"):  # Bernoulli mixture of independent and identical binary RVs
-                    is_same = self.corr > rng.random(self.num_states)
-                    n_same = np.sum(is_same)
-                    n_diff = self.num_states - n_same
-                    self.action_policies[np.ix_(agent_indices_bool, is_same)] = rng.integers(
-                        0, 2, n_same)[np.newaxis, :]
-                    self.action_policies[np.ix_(agent_indices_bool, ~is_same)] = rng.integers(
-                        0, 2, [agents_per_group, n_diff])
-                elif (gen_type == "sum"):  # signed sum of independent and identical normal RVs
-                    rho_normaldist = np.sin(np.pi / 2 * self.corr)
-                    self.action_policies[agent_indices_bool, :] = (
-                        np.sqrt(1 - rho_normaldist)
-                        * rng.normal(size=(agents_per_group, self.num_states))
-                        + np.sqrt(rho_normaldist)
-                        * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
-                else:
-                    print("choose sum or mix")
-        else:
-            print('use a defined groundmodel')
 
     def forward(self, state):
         """
@@ -120,3 +82,57 @@ class GroundModelJointPolicy:
 
         """
         return self.state_set_inds.index(binary2index((np.array(state[0]) > 0)))
+    
+    def set_action_policies(self, policy_params):
+        """
+        Set the action policies based on the given policy parameters.
+
+        Args:
+            policy_params (dict): A dictionary containing the policy parameters.
+                model_name (str): The name of the model.
+                seed (int): The random seed.
+                corr (float): The correlation coefficient.
+                ensemble (str): The ensemble type.
+                M (int): The number of abstract agents.
+                
+        Raises:
+            AssertionError: If the group sizes are uneven for the 'bitpop' model.
+
+        Notes:
+            - The 'bitpop' model requires group sizes to be equal.
+            - The 'gen_type' parameter can be either 'mix' or 'sum'.
+                - 'mix': Bernoulli mixture of independent and identical binary random variables.
+                - 'sum': Signed sum of independent and identical normal random variables.
+            - The action policies are updated based on the given policy parameters.
+
+        Returns:
+            None
+        """
+
+        if policy_params['model_name'] == 'bitpop':
+            seed = policy_params['seed']
+            corr = policy_params['corr']
+            gen_type = policy_params['ensemble']
+            num_agent_groups = policy_params['M']
+            assert (self.num_agents/num_agent_groups).is_integer(), "Uneven group sizes. bitpop model requires group sizes to be equal"
+            agents_per_group = int(self.num_agents/num_agent_groups)
+
+            rng = np.random.default_rng(seed)
+
+            for agent_group_idx in range(num_agent_groups):
+                agent_indices = range(agent_group_idx * agents_per_group, (agent_group_idx + 1) * agents_per_group)
+                agent_indices_bool = np.zeros(self.num_agents, dtype=bool)
+                agent_indices_bool[agent_indices] = True
+                if (gen_type == "mix"):  # Bernoulli mixture of independent and identical binary RVs
+                    is_same = corr > rng.random(self.num_states)
+                    n_same = np.sum(is_same)
+                    n_diff = self.num_states - n_same
+                    self.action_policies[np.ix_(agent_indices_bool, is_same)] = rng.integers(0, 2, n_same)[np.newaxis, :]
+                    self.action_policies[np.ix_(agent_indices_bool, ~is_same)] = rng.integers(0, 2, [agents_per_group, n_diff])
+                elif (gen_type == "sum"):  # signed sum of independent and identical normal RVs
+                    rho_normaldist = np.sin(np.pi / 2 * corr)
+                    self.action_policies[agent_indices_bool, :] = (np.sqrt(1 - rho_normaldist) * rng.normal(size=(agents_per_group, self.num_states)) + np.sqrt(rho_normaldist) * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
+                else:
+                    print("choose sum or mix")
+        else:
+            print('use a defined ground model')
