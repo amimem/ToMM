@@ -85,10 +85,10 @@ def generate_synthetic_data(policy_params):
 
         # save data
         shuffled_inds= rng.permutation(args.T)
-        datasets[f"dataset_{ix}"] = {"seed": seed, 
-                                     "states": state_seq[shuffled_inds], 
-                                     "actions": joint_action_seq[shuffled_inds],
-                                     "timesteps": episode_time_indices[shuffled_inds]}
+        datasets[f"dataset_{seed}"] = { "seed": seed, 
+                                        "states": state_seq[shuffled_inds], 
+                                        "actions": joint_action_seq[shuffled_inds],
+                                        "timesteps": episode_time_indices[shuffled_inds] }
 
     return datasets
 
@@ -182,10 +182,10 @@ def generate_simulated_data(policy_params, config, warmup=False):
                 episode_time_indices.append(episode_step)
 
         # save data
-        datasets[f"dataset_{ix}"] = {"seed": seed,
-                                    "states": np.array(state_seq),
-                                    "actions": np.array(joint_action_seq),
-                                    "timesteps": np.array(episode_time_indices)}
+        datasets[f"dataset_{seed}"] = { "seed": seed,
+                                        "states": np.array(state_seq),
+                                        "actions": np.array(joint_action_seq),
+                                        "timesteps": np.array(episode_time_indices) }
         
     print('took '+str(time.time()-st))
     return datasets
@@ -222,10 +222,10 @@ if __name__ == '__main__':
 
     # get the hash of the arguments
     hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
-    # get a timestamp
+    # get a timestamp - use this to [n] either make the output folder unique or [y] as file metadata
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    # combine the hash and timestamp to get a unique filename
-    output_filename = f"data_{hash}_{timestamp}"
+    # combine the hash to get a unique filename
+    output_filename = f"data_{hash}"
     print('saving '+output_filename)
 
     output_dir = os.path.join(output_path, output_filename)
@@ -237,6 +237,7 @@ if __name__ == '__main__':
 
     with h5py.File(filename, 'w') as f, open(attrs_filename, 'w') as yaml_file:
         f.attrs.update(args.__dict__)
+        f.attrs['timestamp'] = timestamp
         attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
         for dataset_name, dataset in datasets.items():
             group = f.create_group(dataset_name)
