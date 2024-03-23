@@ -28,10 +28,9 @@ class STOMPnet(nn.Module):
 
     def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2, num_codebooks=10):
         super(STOMPnet, self).__init__()
-        self.num_codebooks = num_codebooks
         # Define the encoder, decoder, and assigner
         self.sample_from_abstract_joint_policy = Encoder(
-            state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
+            state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents, num_codebooks)
         self.ground_joint_policy = Decoder(
             num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim)
         self.assigner = Assigner(num_abs_agents, num_agents)
@@ -70,6 +69,7 @@ class Encoder(nn.Module):
         abs_action_space_dim (int): Dimension of the abstract action space.
         enc_hidden_dim (int): Dimension of the hidden layer in the encoder.
         num_abs_agents (int): Number of abstract agents.
+        num_codebooks (int): Number of codebooks.
 
     Attributes:
         state_space_dim (int): Dimension of the state space.
@@ -80,12 +80,13 @@ class Encoder(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents):
+    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents, num_codebooks):
         super(Encoder, self).__init__()
         self.state_space_dim = state_space_dim
         self.abs_action_space_dim = abs_action_space_dim
         self.hidden_dim = enc_hidden_dim
         self.num_abs_agents = num_abs_agents
+        self.num_codebooks = num_codebooks
 
         # realize the architecture
         self.abstract_agent_policy_networks = MultiChannelNet(

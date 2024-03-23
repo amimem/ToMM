@@ -21,8 +21,10 @@ parser.add_argument('--model_name', type=str,
                     # default='single', help='Name of the model')
                     # default='multi', help='Name of the model')
 parser.add_argument('--M', type=int, default=2, help='Number of abstract agents')
-parser.add_argument('--L', type=int, default=2, help='Abstract action space dimension')
+parser.add_argument('--L', type=int, default=100, help='Abstract action space dimension')
 parser.add_argument('--n_features', type=int, default=2, help='Agent embedding dimension')
+parser.add_argument('--num_codebooks', type=int,
+                    default=10, help='Number of codebooks')
 parser.add_argument('--hidden_capacity', type=int,
                     default=240, help='capacity of abstract joint policy space')
 parser.add_argument('--epochs', type=int, default=20, help='Number of epochs')
@@ -114,6 +116,7 @@ if __name__ == '__main__':
         num_abs_agents = args.M
         abs_action_space_dim = args.L
         agent_embedding_dim = args.n_features
+        num_codebooks = args.num_codebooks
         assert (args.hidden_capacity/num_abs_agents).is_integer(
         ), "num of abstract agents should divide hidden dimensions"
         enc_hidden_dim = int(args.hidden_capacity/num_abs_agents)
@@ -124,7 +127,8 @@ if __name__ == '__main__':
             num_agents,
             num_abs_agents,
             action_space_dim=action_space_dim,
-            agent_embedding_dim=agent_embedding_dim
+            agent_embedding_dim=agent_embedding_dim,
+            num_codebooks=num_codebooks
         )
     elif model_name == 'single':
         assert (args.hidden_capacity /
