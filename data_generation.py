@@ -1,15 +1,16 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.distributions import Categorical
 import numpy as np
 import os
 import argparse
-from Environment import Environment
-from GroundModelJointPolicy import GroundModelJointPolicy
 import time
 import itertools
-import random
+import h5py
+import hashlib
+import yaml
+from torch.distributions import Categorical
+from Environment import Environment
+from GroundModelJointPolicy import GroundModelJointPolicy
+from utils import numpy_scalar_to_python
 
 parser = argparse.ArgumentParser(description='data generation parameters')
 parser.add_argument('--stablefac', type=float,
@@ -49,25 +50,24 @@ def generate_synthetic_data(policy_params):
 
     # hard-coded over all states in policy function
 
+    N = args.N  # agents
     K = args.K  # state space dimension
     A = args.A # number of actions
     args.T = args.sps*(A**K) # overwritten when not using environment
 
-    data_list = []
-
+    datasets = {}
     seed_list = range(args.num_seeds)
-    for seed in seed_list:
+    for ix, seed in enumerate(seed_list):
         print(f"running seed {seed} of {len(seed_list)}")
-
         rng = np.random.default_rng(seed=seed)
         policy_params['seed'] = seed
 
         # Initialize ground model
         torch.manual_seed(seed)
         model = GroundModelJointPolicy(
-            num_agents,
-            state_space_dim,
-            action_space_dim=action_space_dim,
+            num_agents=N,
+            state_space_dim=K,
+            action_space_dim=A,
             )
         model.set_action_policies(policy_params)
         
@@ -82,15 +82,15 @@ def generate_synthetic_data(policy_params):
         state_seq = np.tile(states, reps=(args.sps, 1))
         joint_action_seq = np.tile(actions, reps=(args.sps, 1))
         episode_time_indices = np.arange(args.T)
-        sim_data = {}
-        sim_data["seed"] = seed
-        sim_data["times"] = episode_time_indices
-        shuffled_inds= rng.permutation(args.T)
-        sim_data["states"] = state_seq[shuffled_inds]
-        sim_data["actions"] = joint_action_seq[shuffled_inds]
-        data_list.append(sim_data)
 
-    return data_list
+        # save data
+        shuffled_inds= rng.permutation(args.T)
+        datasets[f"dataset_{ix}"] = {"seed": seed, 
+                                     "states": state_seq[shuffled_inds], 
+                                     "actions": joint_action_seq[shuffled_inds],
+                                     "timesteps": episode_time_indices[shuffled_inds]}
+
+    return datasets
 
 
 def generate_simulated_data(policy_params, config, warmup=False):
@@ -131,8 +131,8 @@ def generate_simulated_data(policy_params, config, warmup=False):
 
     # rollout model into a dataset of trajectories
     st = time.time()
-    data_list = []
-    for seed in seed_list:
+    datasets = {}
+    for ix, seed in enumerate(seed_list):
         print(f"running seed {seed} of {len(seed_list)}")
         if not warmup:
             rng = np.random.default_rng(seed=seed)
@@ -181,25 +181,19 @@ def generate_simulated_data(policy_params, config, warmup=False):
                 env.state, episode_step = env.step(env.state, actions)
                 episode_time_indices.append(episode_step)
 
-        sim_data = {}
-        sim_data["seed"] = seed
-        sim_data["times"] = np.array(episode_time_indices)
-        sim_data["states"] = np.array(state_seq)
-        sim_data["actions"] = np.array(joint_action_seq)
-
-        data_list.append(sim_data)
+        # save data
+        datasets[f"dataset_{ix}"] = {"seed": seed,
+                                    "states": np.array(state_seq),
+                                    "actions": np.array(joint_action_seq),
+                                    "timesteps": np.array(episode_time_indices)}
+        
     print('took '+str(time.time()-st))
-    return data_list
+    return datasets
 
 if __name__ == '__main__':
 
     output_path = os.path.join(os.getcwd(), args.output)
-
-    # remove
-    dataset_label = "4agentdebug"
-    # 2^K states so 2^{K+1}possible single agent policies. Here, set so 10*N number of policies >> N  # state space
-    # K_bound = int(5*np.log2(np.log2(args.N)))
-    print("setting state space K=5*log2(log2(N))="+str(args.K)+" dimensions (2^K="+str(2**args.K)+' possible observations)')
+    os.makedirs(output_path, exist_ok=True)
 
     policy_params = {}
     policy_params['model_name'] = args.ground_model_name
@@ -208,31 +202,44 @@ if __name__ == '__main__':
         policy_params['ensemble'] = args.ensemble  # ensemble method
         policy_params['M'] = args.M  # number of agent groups
         assert (args.N/policy_params['M']).is_integer(), \
-            "number of agents groups should divide total number of agents for some groundmodels"
+            "number of agents groups should divide total number of agents for some ground models"
     else:
         os.abort("select an implemented ground model")
-    # add parameter setting of ground model to label
-    dataset_label += ''.join(['_'+key+'_'+str(value)
-                              for key, value in policy_params.items()])
 
     # assign sim parameters
     num_episodes = args.num_episodes
     action_selection = args.action_selection_method
-    
-    # assign system parameters
-    state_space_dim = args.K   # state space dimension
-    num_agents = args.N   # agents
-    action_space_dim = args.A # actions
+
+    # 2^K states so 2^{K+1}possible single agent policies. Here, set so 10*N number of policies >> N  # state space
+    # K_bound = int(5*np.log2(np.log2(args.N)))  # bound on state space dimension
+    print("setting state space K=5*log2(log2(N))="+str(args.K)+" dimensions (2^K="+str(2**args.K)+' possible observations)')
 
     if args.env:
         config = {"num_episodes": num_episodes, "action_selection": action_selection}
-        data_list = generate_simulated_data(policy_params, config)
-        output_filename = f"{output_path}_{dataset_label}_sim_data_action_selection_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{args.T}_g_{args.stablefac}]"
+        datasets = generate_simulated_data(policy_params, config)
     else:
-        data_list = generate_synthetic_data(policy_params)
-        output_filename = f"{output_path}_{dataset_label}_sim_data_action_selection_{action_selection}_numepi_{num_episodes}_K_{state_space_dim}_N_{num_agents}_T_{args.T}_sps_{args.sps}"
+        datasets = generate_synthetic_data(policy_params)
 
-    for sit,sim_data in enumerate(data_list):
-        filename = f'{output_filename}_dataseed_{sim_data["seed"]}.npy'
-        print('saving '+filename)
-        np.save(filename, sim_data)
+    # get the hash of the arguments
+    hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
+    # get a timestamp
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    # combine the hash and timestamp to get a unique filename
+    output_filename = f"data_{hash}_{timestamp}"
+    print('saving '+output_filename)
+
+    output_dir = os.path.join(output_path, output_filename)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # save the data
+    filename = os.path.join(output_dir, "data" + '.h5')
+    attrs_filename = os.path.join(output_dir, "config" + '.yaml')
+
+    with h5py.File(filename, 'w') as f, open(attrs_filename, 'w') as yaml_file:
+        f.attrs.update(args.__dict__)
+        attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
+        for dataset_name, dataset in datasets.items():
+            group = f.create_group(dataset_name)
+            for key, value in dataset.items():
+                group.create_dataset(key, data=value)
+        yaml.dump(attrs_dict, yaml_file)

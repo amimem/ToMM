@@ -21,6 +21,10 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
     y_hard_diff = y_hard - y_soft.detach() + y_soft
     return y_hard_diff
 
+def numpy_scalar_to_python(value):
+    if isinstance(value, np.generic):
+        return np.asscalar(value)
+    return value
 
 class MultiChannelNet(nn.Module):
     """
