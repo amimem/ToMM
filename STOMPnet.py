@@ -16,6 +16,8 @@ class STOMPnet(nn.Module):
         num_agents (int): Number of agents
         num_abs_agents (int): Number of abstract agents
         action_space_dim (int, optional): Dimension of the action space. Defaults to 2.
+        agent_embedding_dim (int, optional): Dimension of the agent embedding. Defaults to 2.
+        num_codebooks (int, optional): Number of codebooks. Defaults to 10.
 
     Attributes:
         sample_from_abstract_joint_policy (Encoder): Encoder module
@@ -24,9 +26,9 @@ class STOMPnet(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2):
+    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2, num_codebooks=10):
         super(STOMPnet, self).__init__()
-
+        self.num_codebooks = num_codebooks
         # Define the encoder, decoder, and assigner
         self.sample_from_abstract_joint_policy = Encoder(
             state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents)
@@ -105,10 +107,9 @@ class Encoder(nn.Module):
 
         """
         logit_vectors = self.abstract_agent_policy_networks(state)
-        num_codebooks = 10
-        assert (logit_vectors.shape[-1]/num_codebooks).is_integer(), "num_codebooks must divide encoder output"
-        num_components = int(logit_vectors.shape[-1]/num_codebooks)
-        logit_vectors = logit_vectors.reshape(logit_vectors.shape[:-1]+(num_codebooks, num_components))
+        assert (logit_vectors.shape[-1]/self.num_codebooks).is_integer(), "num_codebooks must divide encoder output"
+        num_components = int(logit_vectors.shape[-1]/self.num_codebooks)
+        logit_vectors = logit_vectors.reshape(logit_vectors.shape[:-1]+(self.num_codebooks, num_components))
         one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
         return one_hot_vectors
 
