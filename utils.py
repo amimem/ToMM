@@ -23,7 +23,7 @@ def get_gumbel_softmax_sample(logit_vector, tau=1):
 
 def numpy_scalar_to_python(value):
     if isinstance(value, np.generic):
-        return np.asscalar(value)
+        return value.item()
     return value
 
 class MultiChannelNet(nn.Module):
