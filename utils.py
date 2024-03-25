@@ -26,6 +26,11 @@ def numpy_scalar_to_python(value):
         return value.item()
     return value
 
+def count_parameters(model):
+    assert isinstance(model, nn.Module), "model must be a torch.nn.Module"
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
 class MultiChannelNet(nn.Module):
     """
     Implements a 2D module array architecture. Each row is a channel. Parameters refer to architecture of individual channels.

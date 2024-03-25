@@ -6,13 +6,13 @@ import torch.optim as optim
 import numpy as np
 import random
 from STOMPnet import STOMPnet
-from utils import MultiChannelNet
+from utils import MultiChannelNet, count_parameters
 import warnings
 import os
 import h5py
 import yaml
 import hashlib
-# import wandb
+import wandb
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
@@ -38,10 +38,12 @@ parser.add_argument('--data_dir', type=str,
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
+parser.add_argument('--interval', type=int, default=5, help='Logging interval')
 
 args = parser.parse_args()
 
-# wandb.init(project='STOMP', entity='main_training')
+# logging to wandb
+wandb.login()
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device", flush=True)
@@ -69,6 +71,7 @@ if __name__ == '__main__':
     epochs = args.epochs
     learning_rate = args.learning_rate
     batch_size = args.batch_size
+    log_interval = args.interval
 
     print(f"seed {seed} training of {args.model_name} with capacity {args.hidden_capacity} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}")
 
@@ -77,6 +80,20 @@ if __name__ == '__main__':
     data_dir = args.data_dir
     data_filename = os.path.join(outdir, data_dir, 'data.h5')
     config_filename = os.path.join(outdir, data_dir, 'config.yaml')
+    
+    # make a directory for saving the results
+    save_dir = os.path.join(outdir, data_dir, 'training_results/')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # make a subdirectory for each run
+    hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
+    train_info_dir = os.path.join(save_dir, hash)
+    if not os.path.exists(train_info_dir):
+        os.makedirs(train_info_dir)
+
+    # initialize wandb
+    wandb.init(project="STOMP", name=train_info_dir, config=args)
 
     print("using data:"+ data_filename)
 
@@ -154,8 +171,23 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()  # takes logits
     # criterion = nn.BCEWithLogitsLoss() #since actions are binary
 
+    # log number of parameters
+    num_parameters = count_parameters(net)
+
+
     num_action_samples = len(train_loader)*batch_size*num_agents
 
+    # Access the existing config and add additional parameters
+    config = wandb.config
+    config.update({"num_agents": num_agents,
+                    "state_space_dim": state_space_dim,
+                    "action_space_dim": action_space_dim,
+                    "num_action_samples": num_action_samples,
+                    "num_parameters": num_parameters})
+
+    # Log the updated config
+    wandb.config.update(config)
+    
     # evaluate pretraining loss
     pre_training_loss = 0
     pre_training_accuracy = 0
@@ -175,6 +207,9 @@ if __name__ == '__main__':
     logging_loss = []
     logging_acc = []
     last_loss = 0
+
+
+    # training loop
     for epoch in range(epochs):
         running_loss = 0.0
         running_correct = 0.0
@@ -208,6 +243,7 @@ if __name__ == '__main__':
             running_loss += loss.item()
             max_scores, max_idx_class = action_logit_vectors.max(dim=-1)
             running_correct += (labels == max_idx_class).sum().item()
+            wandb.watch(net, log="all")
 
         epoch_accuracy = running_correct / num_action_samples
         epoch_loss = running_loss / num_action_samples
@@ -219,7 +255,17 @@ if __name__ == '__main__':
         logging_loss.append(epoch_loss)
         logging_acc.append(epoch_accuracy)
 
-        # wandb.log({"epoch": epoch+1, "loss": epoch_loss})
+        # save model every log_interval epochs
+        # print(f"saving model for epoch: {epoch+1} with {log_interval}", flush=True)
+        if (epoch+1) % log_interval == 0:
+            torch.save(net.state_dict(), train_info_dir + f"/state_dict_{epoch+1}.pt")
+            print(f"~saved model for epoch: {epoch+1}", flush=True)
+
+        # log to wandb
+        wandb.log({"epoch": epoch+1,
+                   "epoch_accuracy": epoch_accuracy, 
+                   "epoch_loss": epoch_loss,
+                   })
 
     training_data = {}
     training_data['loss'] = logging_loss
@@ -227,16 +273,6 @@ if __name__ == '__main__':
 
     training_run_info = f"_{args.model_name}_cap_{args.hidden_capacity}_trainseed_{seed}_epochs_{epochs}_batchsize_{batch_size}_lr_{args.learning_rate}"
     print("saving " + training_run_info)
-
-    save_dir = os.path.join(outdir, data_dir, 'training_results/')
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    # make a subdirectory for each run
-    hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
-    train_info_dir = os.path.join(save_dir, hash)
-    if not os.path.exists(train_info_dir):
-        os.makedirs(train_info_dir)
 
     # save training results dict as numpy
     np.save(train_info_dir + "/results.npy", training_data)
