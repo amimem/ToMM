@@ -247,16 +247,12 @@ if __name__ == '__main__':
 
         epoch_accuracy = running_correct / num_action_samples
         epoch_loss = running_loss / num_action_samples
-        if np.isclose(last_loss, epoch_loss):
-            print("loss not changing")
-            break
         last_loss = epoch_loss
         print(f"Epoch {epoch+1}, loss: {epoch_loss:.8}, acc: {epoch_accuracy:.8}", flush=True)
         logging_loss.append(epoch_loss)
         logging_acc.append(epoch_accuracy)
 
         # save model every log_interval epochs
-        # print(f"saving model for epoch: {epoch+1} with {log_interval}", flush=True)
         if (epoch+1) % log_interval == 0:
             torch.save(net.state_dict(), train_info_dir + f"/state_dict_{epoch+1}.pt")
             print(f"~saved model for epoch: {epoch+1}", flush=True)
@@ -281,4 +277,4 @@ if __name__ == '__main__':
     with open(train_info_dir + "/args.yaml", 'w') as file:
         yaml.dump(args.__dict__, file)
 
-    torch.save(net.state_dict(), train_info_dir + "/state_dict.pt")
+    torch.save(net.state_dict(), train_info_dir + "/state_dict_final.pt")
