@@ -221,7 +221,7 @@ if __name__ == '__main__':
         datasets = generate_synthetic_data(policy_params)
 
     # get the hash of the arguments
-    hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
+    hash = hashlib.blake2s(str(args.__dict__).encode(), digest_size=5).hexdigest()
     # get a timestamp - use this to [n] either make the output folder unique or [y] as file metadata
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     # combine the hash to get a unique filename
