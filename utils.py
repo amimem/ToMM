@@ -150,3 +150,39 @@ def get_corr_matrix(action_seq):
                 corr_matrix[i, j] = 2 * \
                     np.sum(sims[i, :] == sims[j, :]) / num_steps - 1
     return corr_matrix + corr_matrix.T + np.identity(num_agents)
+
+
+def solve_quadratic(a,b,c):
+    return (-b+np.sqrt(b**2-4*a*c))/(2*a) #assumes negative root always extraneous
+
+def get_width(config):
+
+    model_name = config['model_name']
+    num_agents = config['num_agents']
+    state_space_dim = config['state_space_dim']
+    action_space_dim = config['action_space_dim']
+    n_features = config['n_features']
+    n_hidden_layers = config['n_hidden_layers']
+    num_abs_agents = config['num_abs_agents']
+    num_params = config['num_parameters']
+    abs_action_space_dim = config['abs_action_space_dim']
+
+    if model_name=='single':
+        a=n_hidden_layers
+        b=num_agents*(action_space_dim+state_space_dim)
+        c=-num_params
+        W=solve_quadratic(a,b,c)
+    elif model_name=='multi':
+        a=n_hidden_layers
+        b=num_agents*action_space_dim+state_space_dim
+        c=-num_params
+        W=solve_quadratic(a,b,c)
+    elif model_name=='stomp':
+        enc2dec_ratio = config['enc2dec_ratio']
+        a=(num_abs_agents+enc2dec_ratio**2)*n_hidden_layers
+        b=(num_abs_agents*abs_action_space_dim+state_space_dim) + (n_features+abs_action_space_dim+action_space_dim)*enc2dec_ratio
+        c=num_agents*num_abs_agents-num_params
+        W=solve_quadratic(a,b,c)
+    else:
+        print('choose valid model name')
+    return W
