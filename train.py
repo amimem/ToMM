@@ -96,7 +96,7 @@ if __name__ == '__main__':
         os.makedirs(train_info_dir)
 
     # initialize wandb
-    wandb.init(project="STOMP", name=train_info_dir, config=args)
+    wandb.init(project="STOMP", name=train_info_dir, config=args.__dict__)
 
     print("using data:" + data_filename)
 
@@ -186,15 +186,14 @@ if __name__ == '__main__':
     num_action_samples = len(train_loader)*batch_size*num_agents
 
     # Access the existing config and add additional parameters
-    config = wandb.config
-    config.update({"num_agents": num_agents,
+    new_info = {"num_agents": num_agents,
                     "state_space_dim": state_space_dim,
                     "action_space_dim": action_space_dim,
                     "num_action_samples": num_action_samples,
-                    "num_parameters": num_parameters})
+                    "num_parameters": num_parameters}
 
     # Log the updated config
-    wandb.config.update(config)
+    wandb.config.update(new_info)
     
     # evaluate pretraining loss
     pre_training_loss = 0
