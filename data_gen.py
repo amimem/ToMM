@@ -24,7 +24,7 @@ parser.add_argument('--corr', type=float,
 parser.add_argument('--A', type=int,
                     default=2, help='number of actions')
 parser.add_argument('--N', type=int,
-                    default=4, help='number of ground agents')
+                    default=10, help='number of ground agents')
 parser.add_argument('--M', type=int,
                     default=2, help='number of abstract agents')
 parser.add_argument('--K', type=int,

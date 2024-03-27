@@ -37,15 +37,15 @@ parser.add_argument('--enc2dec_ratio', type=float,
 parser.add_argument('--epochs', type=int, default=20, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
                     default=5e-5, help='Learning rate')
-parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_dir', type=str,
-                    default='data_16a5badfb6/', help='Data directory')
+                    default='data_e72dd17cbc/', help='Data directory')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
-parser.add_argument('--interval', type=int, default=5, help='Logging interval')
+parser.add_argument('--checkpoint_interval', type=int, default=100, help='Checkpointing interval')
 
 args = parser.parse_args()
 
