@@ -131,7 +131,8 @@ class GroundModelJointPolicy:
                     self.action_policies[np.ix_(agent_indices_bool, ~is_same)] = rng.integers(0, 2, [agents_per_group, n_diff])
                 elif (gen_type == "sum"):  # signed sum of independent and identical normal RVs
                     rho_normaldist = np.sin(np.pi / 2 * corr)
-                    self.action_policies[agent_indices_bool, :] = (np.sqrt(1 - rho_normaldist) * rng.normal(size=(agents_per_group, self.num_states)) + np.sqrt(rho_normaldist) * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
+                    self.action_policies[agent_indices_bool, :] = (np.sqrt(1 - rho_normaldist) * rng.normal(size=(agents_per_group, self.num_states)) +
+                                                                    np.sqrt(rho_normaldist) * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
                 else:
                     print("choose sum or mix")
         else:
