@@ -20,7 +20,7 @@ parser.add_argument('--model_name', type=str,
                     # default='stomp', help='Name of the model')
                     default='single', help='Name of the model')
                     # default='multi', help='Name of the model')
-parser.add_argument('--P', type=int, default=1e7,
+parser.add_argument('--P', type=float, default=1e7,
                     help='Number of model parameters')
 parser.add_argument('--M', type=int, default=2,
                     help='Number of abstract agents')
