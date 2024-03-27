@@ -168,7 +168,7 @@ def get_width(config):
     abs_action_space_dim = config['abs_action_space_dim']
 
     if model_name=='single':
-        a=n_hidden_layers
+        a=n_hidden_layers*num_agents
         b=num_agents*(action_space_dim+state_space_dim)
         c=-num_params
         W=solve_quadratic(a,b,c)
@@ -180,7 +180,8 @@ def get_width(config):
     elif model_name=='stomp':
         enc2dec_ratio = config['enc2dec_ratio']
         a=(num_abs_agents+enc2dec_ratio**2)*n_hidden_layers
-        b=(num_abs_agents*abs_action_space_dim+state_space_dim) + (n_features+abs_action_space_dim+action_space_dim)*enc2dec_ratio
+        (num_abs_agents*abs_action_space_dim+state_space_dim)
+        b=num_abs_agents*(abs_action_space_dim+state_space_dim) + (n_features+abs_action_space_dim+action_space_dim)*enc2dec_ratio
         c=num_agents*num_abs_agents-num_params
         W=solve_quadratic(a,b,c)
     else:
