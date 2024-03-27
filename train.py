@@ -93,8 +93,12 @@ if __name__ == '__main__':
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
+    # hash the arguments except for the outdir
+    hash_dict = args.__dict__.copy()
+    hash_dict.pop('outdir')
+
     # make a subdirectory for each run
-    hash = hashlib.blake2s(str(args).encode(), digest_size=5).hexdigest()
+    hash = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
     train_info_dir = os.path.join(save_dir, hash)
     if not os.path.exists(train_info_dir):
         os.makedirs(train_info_dir)
