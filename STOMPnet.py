@@ -26,13 +26,13 @@ class STOMPnet(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, dec_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2, num_codebooks=10):
+    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, dec_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2, n_hidden_layers = 2 ,num_codebooks=10):
         super(STOMPnet, self).__init__()
         # Define the encoder, decoder, and assigner
         self.sample_from_abstract_joint_policy = Encoder(
-            state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents, num_codebooks)
+            state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents, n_hidden_layers, num_codebooks)
         self.ground_joint_policy = Decoder(
-            num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, dec_hidden_dim)
+            num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, n_hidden_layers, dec_hidden_dim)
         self.assigner = Assigner(num_abs_agents, num_agents)
 
     def forward(self, state):
@@ -80,7 +80,7 @@ class Encoder(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents, num_codebooks):
+    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, num_abs_agents, n_hidden_layers, num_codebooks):
         super(Encoder, self).__init__()
         self.state_space_dim = state_space_dim
         self.abs_action_space_dim = abs_action_space_dim
@@ -93,6 +93,7 @@ class Encoder(nn.Module):
             n_channels=num_abs_agents,
             input_size=state_space_dim,
             hidden_layer_width=enc_hidden_dim,
+            n_hidden_layers=n_hidden_layers,
             output_size=abs_action_space_dim
         )
 
@@ -131,7 +132,7 @@ class Decoder(nn.Module):
         shared_ground_agent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
     """
 
-    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, hidden_layer_width):
+    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, hidden_layer_width, n_hidden_layers):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
@@ -147,6 +148,7 @@ class Decoder(nn.Module):
             input_size=state_space_dim,
             hidden_layer_width=hidden_layer_width,
             output_size=action_space_dim,
+            n_hidden_layers = n_hidden_layers,
             # squeezes out the singleton channel dimension
             output_dim=[action_space_dim]
         )

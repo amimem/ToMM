@@ -167,6 +167,7 @@ if __name__ == '__main__':
             num_abs_agents = args.M,
             action_space_dim=action_space_dim,
             agent_embedding_dim= args.n_features,
+            n_hidden_layers=n_hidden_layers,
             num_codebooks=args.num_codebooks
         )
     elif model_name == 'single':
