@@ -35,6 +35,8 @@ parser.add_argument('--num_seeds', type=int,
                     default=10, help='number of seeds')
 parser.add_argument('--action_selection_method', type=str,
                     default='greedy', help='action selection method')
+parser.add_argument('--num_warmup_steps', type=int,
+                    default=100, help='number of warmup steps')
 parser.add_argument('--ensemble', type=str,
                     default='sum', help='ensemble method (sum or mix)')
 parser.add_argument('--ground_model_name', type=str,
@@ -109,7 +111,6 @@ def generate_simulated_data(policy_params, config, warmup=False):
     # assign data generation parameters
     seed_list = range(args.num_seeds)
     num_steps = num_episodes*episode_length
-    num_warmup_steps = 100
 
     dummy_seed = 1
     policy_params['seed'] = dummy_seed
@@ -134,52 +135,35 @@ def generate_simulated_data(policy_params, config, warmup=False):
     datasets = {}
     for ix, seed in enumerate(seed_list):
         print(f"running seed {seed} of {len(seed_list)}")
-        if not warmup:
-            rng = np.random.default_rng(seed=seed)
-            M = policy_params['M']
-            K = args.K
-            A = args.A
-            states = np.array([np.array(l) for l in list(map(list, itertools.product(
-                range(A), repeat=K)))]).astype(np.single)
-            actions = rng.integers(0, A, [len(states), M]).astype(int)
+        episode_time_indices = []
+        state_seq = []
+        joint_action_seq = []
+        env.state = env.sample_initial_state(seed=seed)
 
-            actions = np.vstack(
-                # (actions[:, 0], actions[:, 0], actions[:, 1], actions[:, 1])).T
-                (actions[:, 0], (~actions[:, 0].astype(bool)).astype(int), actions[:, 1], (~actions[:, 1].astype(bool)).astype(int))).T
-            samples_per_state = args.sps # batch_size
-            state_seq = np.tile(states, reps=(samples_per_state, 1))
-            joint_action_seq = np.tile(actions, reps=(samples_per_state, 1))
-            episode_time_indices = np.arange(samples_per_state*A**K)
-        else:
-            episode_time_indices = []
-            state_seq = []
-            joint_action_seq = []
-            env.state = env.sample_initial_state(seed=seed)
+        # warmup
+        for _ in range(args.num_warmup_steps):
+            observed_state = env.state[:state_space_dim]
+            action_probability_vectors = torch.squeeze(model.forward(torch.unsqueeze(observed_state,dim=0)),dim=0)
+            if action_selection == 'greedy':  # take greedy action
+                actions = torch.argmax(action_probability_vectors, dim=-1)
+            else:  # sample
+                # Categorical has batch functionality!
+                actions = Categorical(action_probability_vectors)
+            env.state, episode_step = env.step(env.state, actions)
 
-            # warmup
-            for _ in range(num_warmup_steps):
-                observed_state = env.state[:state_space_dim]
-                action_probability_vectors = torch.squeeze(model.forward(torch.unsqueeze(observed_state,dim=0)),dim=0)
-                if action_selection == 'greedy':  # take greedy action
-                    actions = torch.argmax(action_probability_vectors, dim=-1)
-                else:  # sample
-                    # Categorical has batch functionality!
-                    actions = Categorical(action_probability_vectors)
-                env.state, episode_step = env.step(env.state, actions)
+        for _ in range(num_steps):
+            observed_state = env.state[:state_space_dim]
+            state_seq.append(observed_state.detach().cpu().numpy())
+            action_probability_vectors = torch.squeeze(model.forward(torch.unsqueeze(observed_state,dim=0)),dim=0)
 
-            for _ in range(num_steps):
-                observed_state = env.state[:state_space_dim]
-                state_seq.append(observed_state.detach().cpu().numpy())
-                action_probability_vectors = torch.squeeze(model.forward(torch.unsqueeze(observed_state,dim=0)),dim=0)
-
-                if action_selection == 'greedy':  # take greedy action
-                    actions = torch.argmax(action_probability_vectors, dim=-1)
-                else:  # sample
-                    # Categorical has batch functionality!
-                    actions = Categorical(action_probability_vectors)
-                joint_action_seq.append(actions.detach().cpu().numpy())
-                env.state, episode_step = env.step(env.state, actions)
-                episode_time_indices.append(episode_step)
+            if action_selection == 'greedy':  # take greedy action
+                actions = torch.argmax(action_probability_vectors, dim=-1)
+            else:  # sample
+                # Categorical has batch functionality!
+                actions = Categorical(action_probability_vectors)
+            joint_action_seq.append(actions.detach().cpu().numpy())
+            env.state, episode_step = env.step(env.state, actions)
+            episode_time_indices.append(episode_step)
 
         # save data
         datasets[f"dataset_{seed}"] = { "seed": seed,
