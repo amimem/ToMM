@@ -13,6 +13,7 @@ import h5py
 import yaml
 import hashlib
 import wandb
+import time
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
@@ -80,7 +81,7 @@ if __name__ == '__main__':
     batch_size = args.batch_size
     log_interval = args.checkpoint_interval
 
-    print(f"seed {seed} training of {args.model_name} with modelsize {args.P} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}")
+    print(f"seed {seed} training of {args.model_name} with modelsize {args.P} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}", flush=True)
 
     # load the data from the output folder
     outdir = args.outdir
@@ -104,9 +105,10 @@ if __name__ == '__main__':
         os.makedirs(train_info_dir)
 
     # initialize wandb
-    wandb.init(project="STOMP", name=hash, config=args.__dict__)
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    wandb.init(project="STOMP", name=str(hash) + "_" + str(timestamp), config=args.__dict__)
 
-    print("using data:" + data_filename)
+    print("using data:" + data_filename, flush=True)
 
     # load the hdf data
     with h5py.File(data_filename, 'r') as f:
@@ -118,7 +120,7 @@ if __name__ == '__main__':
     # load the config file
     with open(config_filename, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-        print(config)
+        print(config, flush=True)
 
     data_seed = args.data_seed
     data = datasets[f"dataset_{data_seed}"]
@@ -126,7 +128,7 @@ if __name__ == '__main__':
     states = data["states"]
     actions = data["actions"]
 
-    print(f"actions averages: {np.mean(actions,axis=0)}")
+    print(f"actions averages: {np.mean(actions,axis=0)}", flush=True)
 
     dataset = CustomDataset(states, actions)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -192,7 +194,7 @@ if __name__ == '__main__':
             output_dim=(num_agents, action_space_dim)
         )
     else:
-        print('choose valid model')
+        print('choose valid model', flush=True)
     net.to(device)
 
     criterion = nn.CrossEntropyLoss()  # takes logits
@@ -200,8 +202,8 @@ if __name__ == '__main__':
 
     # log number of parameters
     num_parameters = count_parameters(net)
-    print(f"number of parameters: {num_parameters}")
-    print("gap between P and num_parameters: ", args.P - num_parameters)
+    print(f"number of parameters: {num_parameters}", flush=True)
+    print("gap between P and num_parameters: ", args.P - num_parameters, flush=True)
 
 
     num_action_samples = len(train_loader)*batch_size*num_agents
@@ -228,7 +230,7 @@ if __name__ == '__main__':
         pre_training_loss += sum(criterion(torch.squeeze(
             action_logit_vectors[:, agent_idx, :]), labels[:, agent_idx]) for agent_idx in range(num_agents)).item()
         pre_training_accuracy += (labels == max_idx_class).sum().item()
-    print(f"pre training loss: {pre_training_loss/num_action_samples}, acc: {pre_training_accuracy/num_action_samples}")
+    print(f"pre training loss: {pre_training_loss/num_action_samples}, acc: {pre_training_accuracy/num_action_samples}", flush=True)
 
     optimizer = optim.Adam(net.parameters(), lr=learning_rate)
     logging_loss = []
@@ -262,9 +264,6 @@ if __name__ == '__main__':
             #     loss = loss + l1_regularization_of_assigner_probs
 
             loss.backward()
-
-            # norms=torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=0.01)
-
             optimizer.step()
 
             running_loss += loss.item()
@@ -295,7 +294,7 @@ if __name__ == '__main__':
     training_data['accuracy'] = logging_acc
 
     training_run_info = f"_{args.model_name}_modelsize_{args.P}_trainseed_{seed}_epochs_{epochs}_batchsize_{batch_size}_lr_{args.learning_rate}"
-    print("saving " + training_run_info)
+    print("saving " + training_run_info, flush=True)
 
     # save training results dict as numpy
     np.save(train_info_dir + "/results.npy", training_data)
