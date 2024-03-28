@@ -34,7 +34,7 @@ parser.add_argument('--num_codebooks', type=int,
                     default=10, help='Number of codebooks')
 parser.add_argument('--enc2dec_ratio', type=float,
                     default=1., help='Encoder to decoder ratio')
-parser.add_argument('--epochs', type=int, default=20, help='Number of epochs')
+parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
 parser.add_argument('--learning_rate', type=float,
                     default=5e-5, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     epochs = args.epochs
     learning_rate = args.learning_rate
     batch_size = args.batch_size
-    log_interval = args.interval
+    log_interval = args.checkpoint_interval
 
     print(f"seed {seed} training of {args.model_name} with modelsize {args.P} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}")
 
