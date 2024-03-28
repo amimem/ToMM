@@ -104,7 +104,7 @@ if __name__ == '__main__':
         os.makedirs(train_info_dir)
 
     # initialize wandb
-    wandb.init(project="STOMP", name=train_info_dir, config=args.__dict__)
+    wandb.init(project="STOMP", name=hash, config=args.__dict__)
 
     print("using data:" + data_filename)
 
