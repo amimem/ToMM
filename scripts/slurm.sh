@@ -9,8 +9,7 @@
 #SBATCH --mail-type=ALL 
 #SBATCH --mail-user=memariaa@mila.quebec
 
-#SBATCH --array=0-18
-
+#SBATCH --array=0-12
 
 module load python/3.10.lua
 module load cudatoolkit/12.3.2
@@ -41,27 +40,12 @@ export WANDB_DIR=$SCRATCH/wandb
 # scratch/output/data_8cd3f1c6e8 # 100
 # scratch/output/data_025501a652 # 1000
 # scratch/output/data_66d5636af3 # 10000
-
-python train.py --outdir $SCRATCH/output --data_dir data_e72dd17cbc --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_8cd3f1c6e8 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_025501a652 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_66d5636af3 --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp"
-
-python train.py --outdir $SCRATCH/output --data_dir data_e72dd17cbc --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_8cd3f1c6e8 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_025501a652 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_66d5636af3 --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "single"
-
-python train.py --outdir $SCRATCH/output --data_dir data_e72dd17cbc --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "multi"
-python train.py --outdir $SCRATCH/output --data_dir data_8cd3f1c6e8 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "multi"
-python train.py --outdir $SCRATCH/output --data_dir data_025501a652 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "multi"
-python train.py --outdir $SCRATCH/output --data_dir data_66d5636af3 --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "multi"
-
 # python command_run.py
 
-# echo "Starting task $SLURM_ARRAY_TASK_ID"
-# command=$(sed –n "${SLURM_ARRAY_TASK_ID}p" /home/mila/m/memariaa/marl/sss)
-# srun $command
+echo "Starting task $SLURM_ARRAY_TASK_ID"
+command=$(sed -n "${SLURM_ARRAY_TASK_ID}p" $HOME/abstraction/scripts/commands.txt)
+eval_command=$(eval echo $command)
+srun $eval_command
 
 #$SLURM_TMPDIR/data
 # cp -R $SLURM_TMPDIR/ ~/scratch/
