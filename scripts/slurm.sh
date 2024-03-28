@@ -16,6 +16,8 @@ module load python/3.10.lua
 module load cudatoolkit/12.3.2
 source ./venv/bin/activate
 
+export WANDB_DIR=$SCRATCH/wandb
+
 # mkdir $SLURM_TMPDIR/data
 # tar xf ~/projects/def-xxxx/data.tar -C $SLURM_TMPDIR/data
 
