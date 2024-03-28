@@ -166,7 +166,7 @@ if __name__ == '__main__':
             state_space_dim = state_space_dim,
             abs_action_space_dim = args.L,
             enc_hidden_dim = hidden_dim,
-            dec_hidden_dim = args.enc2dec_ratio*hidden_dim,
+            dec_hidden_dim = int(args.enc2dec_ratio*hidden_dim),
             num_agents=num_agents,
             num_abs_agents = args.M,
             action_space_dim=action_space_dim,
