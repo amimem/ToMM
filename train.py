@@ -99,14 +99,16 @@ if __name__ == '__main__':
     hash_dict.pop('outdir')
 
     # make a subdirectory for each run
-    hash = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
-    train_info_dir = os.path.join(save_dir, hash)
+    hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
+    train_info_dir = os.path.join(save_dir, hash_var)
     if not os.path.exists(train_info_dir):
         os.makedirs(train_info_dir)
 
     # initialize wandb
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    wandb.init(project="STOMP", name=str(hash) + "_" + str(timestamp), config=args.__dict__)
+    wandb_run_name = str(hash_var) + "_" + str(timestamp)
+    print("wandb run name: " + wandb_run_name, flush=True)
+    wandb.init(project="STOMP", name=wandb_run_name, config=args.__dict__)
 
     print("using data:" + data_filename, flush=True)
 
@@ -237,7 +239,8 @@ if __name__ == '__main__':
     logging_acc = []
     last_loss = 0
 
-
+    wandb.watch(net, log="all")
+    
     # training loop
     for epoch in range(epochs):
         running_loss = 0.0
@@ -269,7 +272,6 @@ if __name__ == '__main__':
             running_loss += loss.item()
             max_scores, max_idx_class = action_logit_vectors.max(dim=-1)
             running_correct += (labels == max_idx_class).sum().item()
-            wandb.watch(net, log="all")
 
         epoch_accuracy = running_correct / num_action_samples
         epoch_loss = running_loss / num_action_samples
