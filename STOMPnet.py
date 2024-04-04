@@ -132,7 +132,7 @@ class Decoder(nn.Module):
         shared_ground_agent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
     """
 
-    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, hidden_layer_width, n_hidden_layers):
+    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, n_hidden_layers, hidden_layer_width):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
