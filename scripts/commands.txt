@@ -1,12 +1,20 @@
-python train.py --outdir $SCRATCH/output --data_dir data_e72dd17cbc --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_8cd3f1c6e8 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_025501a652 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_66d5636af3 --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp"
-python train.py --outdir $SCRATCH/output --data_dir data_e72dd17cbc --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_8cd3f1c6e8 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_025501a652 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_66d5636af3 --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "single"
-python train.py --outdir $SCRATCH/output --data_dir data_e72dd17cbc --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "multi"
-python train.py --outdir $SCRATCH/output --data_dir data_8cd3f1c6e8 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "multi"
-python train.py --outdir $SCRATCH/output --data_dir data_025501a652 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "multi"
-python train.py --outdir $SCRATCH/output --data_dir data_66d5636af3 --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "multi"
+python train.py --outdir $SCRATCH/output --data_dir data_75816d80b9 --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp" --learning_rate 1e-6
+python train.py --outdir $SCRATCH/output --data_dir data_330fb6f722 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp" --learning_rate 1e-6
+python train.py --outdir $SCRATCH/output --data_dir data_45dd5039c4 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp" --learning_rate 1e-6
+python train.py --outdir $SCRATCH/output --data_dir data_2a6573283c --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp" --learning_rate 1e-6
+python train.py --outdir $SCRATCH/output --data_dir data_75816d80b9 --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp" --learning_rate 1e-5
+python train.py --outdir $SCRATCH/output --data_dir data_330fb6f722 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp" --learning_rate 1e-5
+python train.py --outdir $SCRATCH/output --data_dir data_45dd5039c4 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp" --learning_rate 1e-5
+python train.py --outdir $SCRATCH/output --data_dir data_2a6573283c --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp" --learning_rate 1e-5
+python train.py --outdir $SCRATCH/output --data_dir data_75816d80b9 --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp" --learning_rate 1e-4
+python train.py --outdir $SCRATCH/output --data_dir data_330fb6f722 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp" --learning_rate 1e-4
+python train.py --outdir $SCRATCH/output --data_dir data_45dd5039c4 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp" --learning_rate 1e-4
+python train.py --outdir $SCRATCH/output --data_dir data_2a6573283c --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp" --learning_rate 1e-4
+python train.py --outdir $SCRATCH/output --data_dir data_75816d80b9 --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp" --learning_rate 1e-3
+python train.py --outdir $SCRATCH/output --data_dir data_330fb6f722 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp" --learning_rate 1e-3
+python train.py --outdir $SCRATCH/output --data_dir data_45dd5039c4 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp" --learning_rate 1e-3
+python train.py --outdir $SCRATCH/output --data_dir data_2a6573283c --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp" --learning_rate 1e-3
+python train.py --outdir $SCRATCH/output --data_dir data_75816d80b9 --L 128 --P 1e6 --n_features 2 --num_codebook 64 --model_name "stomp" --learning_rate 1e-2
+python train.py --outdir $SCRATCH/output --data_dir data_330fb6f722 --L 256 --P 1e7 --n_features 32 --num_codebook 64 --model_name "stomp" --learning_rate 1e-2
+python train.py --outdir $SCRATCH/output --data_dir data_45dd5039c4 --L 512 --P 1e8 --n_features 256 --num_codebook 256 --model_name "stomp" --learning_rate 1e-2
+python train.py --outdir $SCRATCH/output --data_dir data_2a6573283c --L 1024 --P 1e9 --n_features 1024 --num_codebook 256 --model_name "stomp" --learning_rate 1e-2
