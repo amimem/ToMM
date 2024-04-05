@@ -42,7 +42,7 @@ parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
 parser.add_argument('--outdir', type=str, default='output/',
                     help='Output directory')
 parser.add_argument('--data_dir', type=str,
-                    default='data_e72dd17cbc/', help='Data directory')
+                    default='data_75816d80b9/', help='Data directory')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
@@ -108,7 +108,7 @@ if __name__ == '__main__':
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     wandb_run_name = str(hash_var) + "_" + str(timestamp)
     print("wandb run name: " + wandb_run_name, flush=True)
-    wandb.init(project="STOMP", name=wandb_run_name, config=args.__dict__)
+    wandb.init(project="STOMP", entity="abstraction", name=wandb_run_name, config=args.__dict__)
 
     print("using data:" + data_filename, flush=True)
 
@@ -237,9 +237,8 @@ if __name__ == '__main__':
     optimizer = optim.Adam(net.parameters(), lr=learning_rate)
     logging_loss = []
     logging_acc = []
-    last_loss = 0
 
-    wandb.watch(net, log="all")
+    # wandb.watch(net, log="all")
     
     # training loop
     for epoch in range(epochs):
@@ -275,8 +274,11 @@ if __name__ == '__main__':
 
         epoch_accuracy = running_correct / num_action_samples
         epoch_loss = running_loss / num_action_samples
-        last_loss = epoch_loss
         print(f"Epoch {epoch+1}, loss: {epoch_loss:.8}, acc: {epoch_accuracy:.8}", flush=True)
+        wandb.log({"epoch": epoch+1,
+                   "epoch_accuracy": epoch_accuracy, 
+                   "epoch_loss": epoch_loss,
+                   })
         logging_loss.append(epoch_loss)
         logging_acc.append(epoch_accuracy)
 
