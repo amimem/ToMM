@@ -2,12 +2,13 @@
 #SBATCH --gres=gpu:rtx8000:1       # Request GPU "generic resources"
 
 #SBATCH --cpus-per-task=2  # Refer to cluster's documentation for the right CPU/GPU ratio
-#SBATCH --mem=80GB       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
-#SBATCH --time=0-6:00:00     # DD-HH:MM:SS
-#SBATCH -o ~/scratch/slurm-%j-%a.out
-#SBATCH -e ~/scratch/slurm-%j-%a.err
+#SBATCH --mem=32GB       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
+#SBATCH --time=0-06:00:00     # DD-HH:MM:SS
+#SBATCH --partition=unkillable
+#SBATCH -o /home/mila/m/memariaa/scratch/slurm-%j-%a.out
+#SBATCH -e /home/mila/m/memariaa/scratch/slurm-%j-%a.err
 
-#SBATCH --array=0-1
+#SBATCH --array=0-20
 
 module load python/3.10.lua
 module load cudatoolkit/12.3.2
