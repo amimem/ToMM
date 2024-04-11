@@ -94,7 +94,7 @@ class Encoder(nn.Module):
             input_size=state_space_dim,
             hidden_layer_width=enc_hidden_dim,
             n_hidden_layers=n_hidden_layers,
-            output_size=abs_action_space_dim*num_codebooks
+            output_size=abs_action_space_dim
         )
 
     def forward(self, state):  # , independent_mode=True):
@@ -108,14 +108,10 @@ class Encoder(nn.Module):
             torch.Tensor: Abstract actions. dimensions (batch_size, num_abs_agents)
 
         """
-        # (bsz, abstract agents, ground action space) i.e. abs agent policies
         logit_vectors = self.abstract_agent_policy_networks(state)
         assert (logit_vectors.shape[-1]/self.num_codebooks).is_integer(), "num_codebooks must divide encoder output"
-        logit_vectors = logit_vectors.reshape(logit_vectors.shape[:-1]+(self.abs_action_space_dim, self.num_codebooks))
-        # pooling over codebooks
-        # MBDO: consider alternative pooling mechanisms
-        # TODO: check with Max & Matt if this still makes sense re: codebook intent
-        logit_vectors = torch.mean(logit_vectors, dim=-1)
+        num_components = int(logit_vectors.shape[-1]/self.num_codebooks)
+        logit_vectors = logit_vectors.reshape(logit_vectors.shape[:-1]+(self.num_codebooks, num_components))
         one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
         return one_hot_vectors
 
@@ -168,18 +164,14 @@ class Decoder(nn.Module):
         Returns:
             torch.Tensor: Action logit vectors.
         """
-        # reshape abs_actions and abstract_agent_assignments for broadcast matmul
-        # MBDO: find better way of doing matmul besides multiply then sum
-        # https://pytorch.org/docs/stable/generated/torch.matmul.html
-        # my brain hurts reading these docs
-        (batch_size, abs_agent_dim, abs_action_dim) = tuple(abs_actions.shape)
-        (batch_size, ground_agent_dim, abs_agent_dim) = tuple(abstract_agent_assignments.shape)
-        abs_actions = abs_actions.permute(0, 2, 1).unsqueeze(1)
-        abstract_agent_assignments = abstract_agent_assignments.unsqueeze(2)        
-        assert tuple(abs_actions.shape) == (batch_size, 1, abs_action_dim, abs_agent_dim) 
-        assert tuple(abstract_agent_assignments.shape) == (batch_size, ground_agent_dim, 1, abs_agent_dim)
-        assigned_abstract_actions = (abs_actions * abstract_agent_assignments).sum(dim=-1)
-        assert tuple(assigned_abstract_actions.shape) == (batch_size, ground_agent_dim, abs_action_dim)
+        batch_size = abs_actions.shape[0]
+        abs_actions = abs_actions.reshape(abs_actions.shape[:-2] + tuple([abs_actions.shape[-1]*abs_actions.shape[-2]]))
+        assigned_abstract_actions = torch.matmul(
+            abstract_agent_assignments, abs_actions)
+        # abs_actions: (batch_size, num_abs_agents, abs action space dim)
+        # abstract_agent_assignments: (batch_size, num_agents, num_abs_agents)
+        # assigned_abstract_actions: (batch_size, num_agents, abs action space dim)
+     
 
         # run decoder network in parallel over all ground agents
         repeat_dims = (batch_size, 1, 1)
