@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
-from STOMPnet import STOMPnet
+from STOMPnet import STOMPnet, Decoder
 from utils import MultiChannelNet, count_parameters, get_width
 import warnings
 import os
@@ -153,6 +153,7 @@ if __name__ == '__main__':
 
     # model_name input argument should start with model name
     model_name = args.model_name
+
     n_hidden_layers = args.n_hidden_layers
 
     solver_dict = {"model_name": model_name,
@@ -200,6 +201,16 @@ if __name__ == '__main__':
             n_hidden_layers=n_hidden_layers,
             output_size=num_agents*action_space_dim,
             output_dim=(num_agents, action_space_dim)
+        )
+    elif model_name == 'decoderonly':
+        #feeds state directly into decoder by overloading the assigned abstract action input
+        net = Decoder(
+            num_agents=num_agents, 
+            abs_action_space_dim=state_space_dim, 
+            action_space_dim=action_space_dim, 
+            agent_embedding_dim=args.n_features, 
+            n_hidden_layers=n_hidden_layers, 
+            hidden_layer_width=int(args.enc2dec_ratio*hidden_dim)
         )
     else:
         print('choose valid model', flush=True)

@@ -180,9 +180,14 @@ def get_width(config):
     elif model_name=='stomp':
         enc2dec_ratio = config['enc2dec_ratio']
         a=(num_abs_agents+enc2dec_ratio**2)*n_hidden_layers
-        (num_abs_agents*abs_action_space_dim+state_space_dim)
         b=num_abs_agents*(abs_action_space_dim+state_space_dim) + (n_features+abs_action_space_dim+action_space_dim)*enc2dec_ratio
-        c=num_agents*num_abs_agents-num_params
+        c=num_agents*(num_abs_agents + n_features) -num_params
+        W=solve_quadratic(a,b,c)
+    elif model_name=='decoderonly':
+        enc2dec_ratio = config['enc2dec_ratio']
+        a=(enc2dec_ratio**2)*n_hidden_layers
+        b= (n_features+state_space_dim+action_space_dim)*enc2dec_ratio 
+        c=num_agents*n_features-num_params
         W=solve_quadratic(a,b,c)
     else:
         print('choose valid model name')
