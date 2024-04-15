@@ -47,6 +47,7 @@ parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
 parser.add_argument('--checkpoint_interval', type=int, default=100, help='Checkpointing interval')
+parser.add_argument('--wandb_entity', type=str, default=None, help='sharing of wandb logs')
 
 args = parser.parse_args()
 
@@ -81,7 +82,7 @@ if __name__ == '__main__':
     batch_size = args.batch_size
     log_interval = args.checkpoint_interval
 
-    print(f"seed {seed} training of {args.model_name} with modelsize {args.P} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}", flush=True)
+    print(f"seed {seed} training of {args.model_name} model with modelsize {args.P} for {epochs} epochs using batchsize {batch_size} and LR {args.learning_rate}", flush=True)
 
     # load the data from the output folder
     outdir = args.outdir
@@ -108,7 +109,12 @@ if __name__ == '__main__':
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     wandb_run_name = str(hash_var) + "_" + str(timestamp)
     print("wandb run name: " + wandb_run_name, flush=True)
-    wandb.init(project="STOMP", entity="abstraction", name=wandb_run_name, config=args.__dict__)
+
+    if args.wandb_entity is None:
+        wandb.init(project="STOMP", name=wandb_run_name, config=args.__dict__)
+    else:
+        # share run logs with group using entity label: 'abstraction'
+        wandb.init(project="STOMP", entity=args.wandb_entity_name, name=wandb_run_name, config=args.__dict__)
 
     print("using data:" + data_filename, flush=True)
 
