@@ -18,8 +18,8 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='Training parameters')
 parser.add_argument('--model_name', type=str,
-                    # default='stomp', help='Name of the model')
-                    default='single', help='Name of the model')
+                    default='stomp', help='Name of the model')
+                    # default='single', help='Name of the model')
                     # default='multi', help='Name of the model')
 parser.add_argument('--P', type=float, default=1e7,
                     help='Number of model parameters')
@@ -303,12 +303,6 @@ if __name__ == '__main__':
         if (epoch+1) % log_interval == 0:
             torch.save(net.state_dict(), train_info_dir + f"/state_dict_{epoch+1}.pt")
             print(f"~saved model for epoch: {epoch+1}", flush=True)
-
-        # log to wandb
-        wandb.log({"epoch": epoch+1,
-                   "epoch_accuracy": epoch_accuracy, 
-                   "epoch_loss": epoch_loss,
-                   })
 
     training_data = {}
     training_data['loss'] = logging_loss
