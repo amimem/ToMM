@@ -8,6 +8,7 @@ import h5py
 import hashlib
 import yaml
 from torch.distributions import Categorical
+from collections import OrderedDict
 from Environment import Environment
 from GroundModelJointPolicy import GroundModelJointPolicy
 from utils import numpy_scalar_to_python
@@ -208,12 +209,15 @@ if __name__ == '__main__':
     hash_dict = args.__dict__.copy()
     hash_dict.pop('output')
 
+    # make dash_dict an ordered dict
+    hash_dict = dict(sorted(hash_dict.items()))
+
     # get the hash of the hash_dict
-    hash = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
+    hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
     # get a timestamp - use this to [n] either make the output folder unique or [y] as file metadata
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     # combine the hash to get a unique filename
-    output_filename = f"data_{hash}"
+    output_filename = f"data_{hash_var}"
     print('saving '+output_filename)
 
     output_dir = os.path.join(output_path, output_filename)
@@ -227,6 +231,7 @@ if __name__ == '__main__':
         f.attrs.update(args.__dict__)
         f.attrs['timestamp'] = timestamp
         attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
+        attrs_dict['file_attrs']['hash'] = hash_var
         for dataset_name, dataset in datasets.items():
             group = f.create_group(dataset_name)
             for key, value in dataset.items():

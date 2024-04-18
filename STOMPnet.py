@@ -26,7 +26,7 @@ class STOMPnet(nn.Module):
 
     """
 
-    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, dec_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2, n_hidden_layers = 2 ,num_codebooks=10):
+    def __init__(self, state_space_dim, abs_action_space_dim, enc_hidden_dim, dec_hidden_dim, num_agents, num_abs_agents, action_space_dim=2, agent_embedding_dim=2, n_hidden_layers=2, num_codebooks=10):
         super(STOMPnet, self).__init__()
         # Define the encoder, decoder, and assigner
         self.sample_from_abstract_joint_policy = Encoder(
@@ -46,15 +46,24 @@ class STOMPnet(nn.Module):
             torch.Tensor: Output tensor representing the action probabilities (batch_size, num_agents, action_space_dim)
         """
         # Pass the state through the encoder to get abstract actions
-        abs_actions = self.sample_from_abstract_joint_policy(state)
+        abs_action_onehot_arrays = self.sample_from_abstract_joint_policy(
+            state)
 
         # call assigner to sample assignments
         batch_size = state.shape[0]
         abstract_agent_assignments = self.assigner(batch_size)
 
+        abs_action_onehot_arrays = abs_action_onehot_arrays.flatten(
+            start_dim=-2)
+        assigned_abstract_actions = torch.matmul(
+            abstract_agent_assignments, abs_action_onehot_arrays)
+        # abs_action_onehot_arrays: (batch_size, num_abs_agents, abs_action_space_dim)
+        # abstract_agent_assignments: (batch_size, num_agents, num_abs_agents)
+        # assigned_abstract_actions: (batch_size, num_agents, abs_action_space_dim)
+
         # Pass the abstract actions ans assignments through the decoder to get action probabilities
         ground_action_logit_vectors = self.ground_joint_policy(
-            abs_actions, abstract_agent_assignments)
+            assigned_abstract_actions)
 
         return ground_action_logit_vectors
 
@@ -105,13 +114,16 @@ class Encoder(nn.Module):
             state (torch.Tensor): Input state. dimensions (batch_size, state_space_dim)
 
         Returns:
-            torch.Tensor: Abstract actions. dimensions (batch_size, num_abs_agents)
+            torch.Tensor: Multivariate abstract action onehots. dimensions :
+                         (batch_size, num_abs_agents, num_codebooks, abs_action_space_dim/num_codebooks)
 
         """
         logit_vectors = self.abstract_agent_policy_networks(state)
-        assert (logit_vectors.shape[-1]/self.num_codebooks).is_integer(), "num_codebooks must divide encoder output"
+        assert (logit_vectors.shape[-1]/self.num_codebooks).is_integer(
+        ), "num_codebooks must divide encoder output"
         num_components = int(logit_vectors.shape[-1]/self.num_codebooks)
-        logit_vectors = logit_vectors.reshape(logit_vectors.shape[:-1]+(self.num_codebooks, num_components))
+        logit_vectors = logit_vectors.reshape(
+            logit_vectors.shape[:-1]+(self.num_codebooks, num_components))
         one_hot_vectors = get_gumbel_softmax_sample(logit_vectors)
         return one_hot_vectors
 
@@ -132,7 +144,7 @@ class Decoder(nn.Module):
         shared_ground_agent_policy_network (MultiChannelNet): Multi-channel neural network for ground agents.
     """
 
-    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, hidden_layer_width, n_hidden_layers):
+    def __init__(self, num_agents, abs_action_space_dim, action_space_dim, agent_embedding_dim, n_hidden_layers, hidden_layer_width):
         super(Decoder, self).__init__()
         self.num_agents = int(num_agents)
 
@@ -148,30 +160,26 @@ class Decoder(nn.Module):
             input_size=state_space_dim,
             hidden_layer_width=hidden_layer_width,
             output_size=action_space_dim,
-            n_hidden_layers = n_hidden_layers,
+            n_hidden_layers=n_hidden_layers,
             # squeezes out the singleton channel dimension
             output_dim=[action_space_dim]
         )
 
-    def forward(self, abs_actions, abstract_agent_assignments):
+    def forward(self, assigned_abstract_actions):
         """
         Forward pass of the Decoder module.
 
         Args:
-            abs_actions (torch.Tensor): Abstract actions. dimensions (batch_size, num_abs_agents)
-            abstract_agent_assignments (torch.Tensor): Assignments of ground agents to abstract agents. ()
+            assigned_abstract_actions (torch.Tensor): Abstract actions. dimensions (batch_size, num_agents)
 
         Returns:
             torch.Tensor: Action logit vectors.
         """
-        batch_size = abs_actions.shape[0]
-        abs_actions = abs_actions.reshape(abs_actions.shape[:-2] + tuple([abs_actions.shape[-1]*abs_actions.shape[-2]]))
-        assigned_abstract_actions = torch.matmul(
-            abstract_agent_assignments, abs_actions)
-        # abs_actions: (batch_size, num_abs_agents, abs action space dim)
-        # abstract_agent_assignments: (batch_size, num_agents, num_abs_agents)
-        # assigned_abstract_actions: (batch_size, num_agents, abs action space dim)
-     
+
+        batch_size = assigned_abstract_actions.shape[0]
+        if len(assigned_abstract_actions.shape) == 2: #when overloaded with state
+            assigned_abstract_actions=torch.unsqueeze(assigned_abstract_actions,
+                            dim=1).repeat((1,self.num_agents,1))        
 
         # run decoder network in parallel over all ground agents
         repeat_dims = (batch_size, 1, 1)
