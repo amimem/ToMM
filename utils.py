@@ -61,27 +61,27 @@ class MultiChannelNet(nn.Module):
 
                 
     def forward(self, state):
-            """
-            Forward pass of the model.
+        """
+        Forward pass of the model.
 
-            Args:
-                state (torch.Tensor): Input state tensor of dimension (batch_size, statespace_dim).
+        Args:
+            state (torch.Tensor): Input state tensor of dimension (batch_size, statespace_dim).
 
-            Returns:
-                torch.Tensor: Output tensor after passing through the model. 
-                dimension (batch_size, nchannels, output size) for nchannels>1
-                          (batch_size, output size) if channels = 1
-            """
-            logit_vectors = []
-            for channel_idx in range(self.n_channels):
-                x = state.clone() # clone to avoid in-place operations
-                for layer_idx in range(0, self.n_all_layers):
-                    x = torch.relu(self.module_array[channel_idx][layer_idx](x))
-                logit_vectors.append(x)
-            output = logit_vectors[0] if self.n_channels == 1 else torch.stack(logit_vectors, dim=1)
-            if self.output_dim != self.default_output_dim:
-                output = output.reshape(tuple(output.shape[:-1]) + tuple(self.output_dim))
-            return output
+        Returns:
+            torch.Tensor: Output tensor after passing through the model. 
+            dimension (batch_size, nchannels, output size) for nchannels>1
+                      (batch_size, output size) if channels = 1
+        """
+        logit_vectors = []
+        for channel_idx in range(self.n_channels):
+            x = state.clone() # clone to avoid in-place operations
+            for layer_idx in range(0, self.n_all_layers):
+                x = torch.relu(self.module_array[channel_idx][layer_idx](x))
+            logit_vectors.append(x)
+        output = logit_vectors[0] if self.n_channels == 1 else torch.stack(logit_vectors, dim=1)
+        if self.output_dim != self.default_output_dim:
+            output = output.reshape(tuple(output.shape[:-1]) + tuple(self.output_dim))
+        return output
 
 
 def compare_plot(output_filenames):

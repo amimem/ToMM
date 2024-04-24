@@ -195,7 +195,7 @@ if __name__ == '__main__':
     num_episodes = args.num_episodes
     action_selection = args.action_selection_method
 
-    # 2^K states so 2^{K+1}possible single agent policies. Here, set so 10*N number of policies >> N  # state space
+    # 2^K states so 2^{2^{K}} possible single agent policies.
     # K_bound = int(5*np.log2(np.log2(args.N)))  # bound on state space dimension
     print("setting state space K=5*log2(log2(N))="+str(args.K)+" dimensions (2^K="+str(2**args.K)+' possible observations)')
 
