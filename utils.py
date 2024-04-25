@@ -183,6 +183,11 @@ def get_width(config):
         b=num_abs_agents*(abs_action_space_dim+state_space_dim) + (n_features+abs_action_space_dim+action_space_dim)*enc2dec_ratio
         c=num_agents*(num_abs_agents + n_features) -num_params
         W=solve_quadratic(a,b,c)
+    elif model_name=='stomp2':
+        a=num_abs_agents*n_hidden_layers
+        b=num_abs_agents*(n_features+abs_action_space_dim+action_space_dim)
+        c=num_agents*(num_abs_agents + n_features) -num_params
+        W=solve_quadratic(a,b,c)
     elif model_name=='decoderonly':
         enc2dec_ratio = config['enc2dec_ratio']
         a=(enc2dec_ratio**2)*n_hidden_layers

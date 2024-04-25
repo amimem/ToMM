@@ -128,8 +128,12 @@ def generate_simulated_data(policy_params, config, warmup=False):
     model.set_action_policies(policy_params)
 
     # Initialize environment
-    env = Environment(state_space_dim, num_agents, episode_length,
-                      fluctuation_strength_factor=fluctuation_strength_factor, start_seed=dummy_seed)
+    env = Environment(
+        state_space_dim, 
+        num_agents, 
+        episode_length,
+        fluctuation_strength_factor=fluctuation_strength_factor, 
+        start_seed=dummy_seed)
 
     # rollout model into a dataset of trajectories
     st = time.time()
