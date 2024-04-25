@@ -135,5 +135,10 @@ class GroundModelJointPolicy:
                                                                     np.sqrt(rho_normaldist) * rng.normal(size=self.num_states)[np.newaxis, :]) > 0
                 else:
                     print("choose sum or mix")
+            if False:        
+                preferred_actions = rng.integers(0, 2, self.num_agents)
+                # interpret existing action space as whether or not preferred action is taken
+                # to transform to action taken: if preferred is 0, then flip value, else leave unchanged
+                self.action_policies[~preferred_actions,:] = ~self.action_policies[~preferred_actions,:]
         else:
             print('use a defined ground model')
