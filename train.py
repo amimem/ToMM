@@ -48,7 +48,9 @@ parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
 parser.add_argument('--checkpoint_interval', type=int, default=100, help='Checkpointing interval')
-parser.add_argument('--wandb_entity', type=str, default=None, help='sharing of wandb logs')
+parser.add_argument('--wandb_entity_name', type=str, default=None, help='sharing of wandb logs')
+parser.add_argument('--wandb_group_name', type=str, default=None, help='group of wandb logs')
+parser.add_argument('--wandb_job_type_name', type=str, default=None, help='job type of wandb logs')
 
 args = parser.parse_args()
 
@@ -110,12 +112,9 @@ if __name__ == '__main__':
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     wandb_run_name = str(hash_var) + "_" + str(timestamp)
     print("wandb run name: " + wandb_run_name, flush=True)
-
-    if args.wandb_entity is None:
-        wandb.init(project="STOMP", name=wandb_run_name, config=args.__dict__)
-    else:
-        # share run logs with group using entity label: 'abstraction'
-        wandb.init(project="STOMP", entity=args.wandb_entity_name, name=wandb_run_name, config=args.__dict__)
+  
+    # share run logs with group using entity label: 'abstraction'
+    wandb.init(project="STOMP", entity=args.wandb_entity_name, group=args.wandb_group_name, job_type=args.wandb_job_type_name, name=wandb_run_name, config=args.__dict__)
 
     print("using data:" + data_filename, flush=True)
 
