@@ -3,6 +3,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 import numpy as np
 import random
 from STOMPnet import STOMPnet, Decoder
@@ -47,6 +48,13 @@ parser.add_argument('--data_dir', type=str,
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--data_seed', type=int,
                     default=0, help='data realization')
+parser.add_argument('--use_lr_scheduler', type=bool,
+                    default=False, help='Use learning rate scheduler'
+                    )
+parser.add_argument('--step_LR', type=int,
+                     default=30, help='Step size for learning rate scheduler')
+parser.add_argument('--gamma', type=float,
+                    default=0.1, help='Gamma for learning rate scheduler')
 parser.add_argument('--checkpoint_interval', type=int, default=100, help='Checkpointing interval')
 parser.add_argument('--wandb_entity_name', type=str, default=None, help='sharing of wandb logs')
 parser.add_argument('--wandb_group_name', type=str, default=None, help='group of wandb logs')
@@ -263,6 +271,10 @@ if __name__ == '__main__':
     print(f"pre training loss: {pre_training_loss/num_action_samples}, acc: {pre_training_accuracy/num_action_samples}", flush=True)
 
     optimizer = optim.Adam(net.parameters(), lr=learning_rate)
+    if args.use_lr_scheduler:
+        step_size = args.step_LR
+        gamma = args.gamma
+        scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma) # stop at learning_rate * (gamma ** (N // step_size)),
     logging_loss = []
     logging_acc = []
 
@@ -295,6 +307,9 @@ if __name__ == '__main__':
 
             loss.backward()
             optimizer.step()
+
+            if args.use_lr_scheduler:
+                scheduler.step()
 
             running_loss += loss.item()
             max_scores, max_idx_class = action_logit_vectors.max(dim=-1)
