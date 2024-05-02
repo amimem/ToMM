@@ -17,7 +17,7 @@ from utils import numpy_scalar_to_python
 parser = argparse.ArgumentParser(description="data generation parameters")
 parser.add_argument("-c", "--coordination", type=str, default="", help="action coordination type")
 parser.add_argument("-a", "--num_actions", type=int, default=8, help="number of actions")
-parser.add_argument("-n","--num_teachers",type=int,default=1,help="number of teachers (ground agents)")
+parser.add_argument("-n","--num_teachers",type=int,default=10,help="number of teachers (ground agents)")
 parser.add_argument( "-w", "--teacher_hidden_dim", type=int, default=16, help="number of teachers (ground agents)")
 parser.add_argument( "-g", "--num_groups", type=int, default=1, help="number of coordinated teacher groups (abstract agents)")
 parser.add_argument("-d", "--dim_state", type=int, default=16, help="state space dimension")
@@ -58,6 +58,7 @@ def generate_teacher_data():
         # generate teacher policies
         # each teacher policy is a neural network with dim_teacher_inp input, dim_teacher_hid hidden, and dim_teacher_out output
         actions = []
+        action_logits = []
         for _ in range(int(num_groups)):
             if coordination == "shared_input":
                 shared_state_bias = torch.FloatTensor(1, dim_teacher_inp).normal_(
@@ -82,6 +83,7 @@ def generate_teacher_data():
                     else:
                         probs = model(states)
 
+                    action_logits.append(probs)
                     actions.append(torch.argmax(probs, dim=-1))
 
         # save data as numpy arrays with the following shapes:
@@ -95,6 +97,7 @@ def generate_teacher_data():
             "seed": seed,
             "states": states,
             "actions": actions,
+            "action_logits": action_logits,
             "timesteps": timesteps,
         }
 
