@@ -140,8 +140,8 @@ if __name__ == "__main__":
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
             for hidden_size, num_hidden_layers in w_d:
-                wandb.init(project="MLP", group="May_3rd", job_type=None, config=config)
                 data, config = load_data(data_hash)
+                wandb.init(project="MLP", group="May_3rd", job_type=None, config=config)
                 num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
                 time_str = time.strftime("%Y-%m-%d-%H-%M")
