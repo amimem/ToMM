@@ -6,6 +6,8 @@ import torch.functional as F
 import h5py
 import yaml
 import torch
+import wandb
+import time
 
 def load_data(data_hash, data_seed=0):
     data_dir = f"output/{data_hash}"
@@ -96,14 +98,13 @@ def train(model, dataloader, num_epochs=10, num_actions=2):
         # print both the average and last epoch loss and accuracy
         print(f"Epoch {epoch+1}/{num_epochs}, Mean Loss: {np.mean(batch_loss):.4f}, Mean Accuracy: {np.mean(batch_accuracy):.4f}\
             , Last Loss: {batch_loss[-1]:.4f}, Last Accuracy: {batch_accuracy[-1]:.4f}")
+        wandb.log({"epoch": epoch, "loss": np.mean(batch_loss), "accuracy": np.mean(batch_accuracy)})
         
     return epoch_loss, epoch_accuracy
 
-def sweep(data_hash, sequence_length=16, hidden_size=64, num_hidden_layers=2, num_epochs=10):
-    data_hash = data_hash
-    data_seed = 0
 
-    data, config = load_data(data_hash, data_seed)
+
+def sweep(data, sequence_length=16, hidden_size=64, num_hidden_layers=2, num_epochs=10):
 
     states = data["states"]
     actions = data["actions"]
@@ -137,9 +138,14 @@ if __name__ == "__main__":
     data_hashes = ["data_d4588ac462", "data_50d7e14370", "data_076e93c9c2"]
     sequence_lengths = [4, 8, 16, 32]
     w_d = [(32, 1), (64, 2), (128, 4), (256, 8)]
-    
+
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
             for hidden_size, num_hidden_layers in w_d:
-                mlp, dataloader, num_actions = sweep(data_hash, sequence_length, hidden_size, num_hidden_layers)
+                data, config = load_data(data_hash)
+                config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
+                time_str = time.strftime("%Y-%m-%d-%H-%M")
+                wandb.init(project="MLP", group=time_str, job_type=None, config=config)
+                mlp, dataloader, num_actions = sweep(data, sequence_length, hidden_size, num_hidden_layers)
                 epoch_loss, epoch_accuracy = train(mlp, dataloader, num_epochs=10, num_actions=num_actions)
+                wandb.finish()
