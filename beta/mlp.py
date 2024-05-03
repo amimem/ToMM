@@ -6,7 +6,8 @@ import h5py
 import yaml
 import torch
 
-data_dir = "output/data_b4c7f51405"
+# data_dir = "output/data_b4c7f51405" # 1 agents
+data_dir = "output/data_78d5097045" # 10 agents
 data_filename = f"{data_dir}/data.h5"
 config_filename = f"{data_dir}/config.yaml"
 
@@ -42,6 +43,8 @@ class MLP(nn.Module):
         self.model = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
             nn.Linear(hidden_size, output_size)
         )
 
@@ -50,44 +53,56 @@ class MLP(nn.Module):
 
 # create a Dataset object
 class CustomDataset(Dataset):
-    def __init__(self, states, actions):
-        # make them float tensors
-        self.states = torch.tensor(states).float()
-        self.actions = torch.tensor(actions).squeeze().long()
+    def __init__(self, states, actions, sequence_length):
+        self.states = [torch.tensor(states[i:i+sequence_length]).float() for i in range(len(states) - sequence_length + 1)]
+        self.actions = [torch.tensor(actions[i:i+sequence_length]).long() for i in range(len(actions) - sequence_length + 1)]
+        self.sequence_length = sequence_length
+        self.num_agents = min(1, actions.shape[1])
 
     def __len__(self):
         return len(self.states)
 
     def __getitem__(self, idx):
-        return self.states[idx], self.actions[idx]
+        # random sample x from the number of agents
+        x = np.random.randint(self.num_agents)
+        return self.states[idx], self.actions[idx][:, x]
     
-dataset = CustomDataset(states, actions)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+sequence_length = 8
+dataset = CustomDataset(states, actions, sequence_length)
+dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
 # main function
 
 # Create an instance of the MLP
 input_size = states.shape[1]
-hidden_size = 16
+hidden_size = 64
 output_size = np.unique(actions).shape[0]
 mlp = MLP(input_size, hidden_size, output_size)
+num_agents = dataset.num_agents
 
 # Train the MLP using the generated data
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(mlp.parameters(), lr=0.1)
+optimizer = optim.Adam(mlp.parameters(), lr=1e-2)
 
-num_epochs = 10
+num_epochs = 100
 for epoch in range(num_epochs):
     batch_loss = []
     batch_accuracy = []
     for i, (state, action) in enumerate(dataloader):
         optimizer.zero_grad()
         output = mlp(state)
-        loss = criterion(output, action)
+        loss = 0
+        accuracy = 0
+        agent_output = output.permute(0, 2, 1) # (batch_size, num_classes, sequence_length)
+        agent_action = action[:, :]
+        loss += criterion(agent_output, agent_action)
+        accuracy += (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
         loss.backward()
         optimizer.step()
         batch_loss.append(loss.item())
-        accuracy = (torch.argmax(output, dim=1) == action).float().mean().item()
+        accuracy = accuracy / num_agents
         batch_accuracy.append(accuracy)
 
-    print(f"Epoch {epoch+1}, Loss: {np.mean(batch_loss)}, Accuracy: {np.mean(batch_accuracy)}")
+    # print both the average and last epoch loss and accuracy
+    print(f"Epoch {epoch+1}/{num_epochs}, Mean Loss: {np.mean(batch_loss):.4f}, Mean Accuracy: {np.mean(batch_accuracy):.4f}\
+          , Last Loss: {batch_loss[-1]:.4f}, Last Accuracy: {batch_accuracy[-1]:.4f}")
