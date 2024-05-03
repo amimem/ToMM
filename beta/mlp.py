@@ -103,21 +103,18 @@ def train(model, dataloader, num_epochs=10, num_actions=2):
     return epoch_loss, epoch_accuracy
 
 
-
-def sweep(data, sequence_length=16, hidden_size=64, num_hidden_layers=2, num_epochs=10):
-
+def get_data_loader(data, sequence_length):
     states = data["states"]
     actions = data["actions"]
-    num_actions = config["file_attrs"]["num_actions"]
-
     # shape of states: (num_states, dim_teacher_inp)
     # shape of actions: (num_states, num_teachers)
     print(states.shape, actions.shape)
 
-    sequence_length = 16
     dataset = CustomDataset(states, actions, sequence_length)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
-    num_agents = dataset.num_agents
+    return dataloader
+
+def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_epochs=10):
 
     state, action = next(iter(dataloader))
     state = state.flatten(start_dim=1)
@@ -132,20 +129,23 @@ def sweep(data, sequence_length=16, hidden_size=64, num_hidden_layers=2, num_epo
 
     mlp = MLP(input_size, hidden_size, num_actions, num_hidden_layers)      
 
-    return mlp, dataloader, num_actions 
+    return mlp
 
 if __name__ == "__main__":
-    data_hashes = ["data_d4588ac462", "data_50d7e14370", "data_076e93c9c2"]
+    # data_hashes = ["data_d4588ac462", "data_50d7e14370", "data_076e93c9c2"]
+    data_hashes = ["data_e94dbedcea", "data_8950a6aae5", "data_d4588ac462"]
     sequence_lengths = [4, 8, 16, 32]
     w_d = [(32, 1), (64, 2), (128, 4), (256, 8)]
 
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
             for hidden_size, num_hidden_layers in w_d:
+                wandb.init(project="MLP", group="May_3rd", job_type=None, config=config)
                 data, config = load_data(data_hash)
+                num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
                 time_str = time.strftime("%Y-%m-%d-%H-%M")
-                wandb.init(project="MLP", group=time_str, job_type=None, config=config)
-                mlp, dataloader, num_actions = sweep(data, sequence_length, hidden_size, num_hidden_layers)
+                dataloader = get_data_loader(data, sequence_length)
+                mlp = get_model(dataloader, num_actions, hidden_size, num_hidden_layers)
                 epoch_loss, epoch_accuracy = train(mlp, dataloader, num_epochs=10, num_actions=num_actions)
                 wandb.finish()
