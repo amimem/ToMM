@@ -1,5 +1,6 @@
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
+import pandas as pd
 import torch.nn as nn
 import torch.optim as optim
 import torch.functional as F
@@ -62,45 +63,33 @@ class CustomDataset(Dataset):
         x = np.random.randint(self.num_agents)
         return self.states[idx], self.actions[idx][:, x]
     
-def train(model, dataloader, num_epochs=10, num_actions=2):
+def train(model, dataloader, num_actions=2):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
-    epoch_loss = []
-    epoch_accuracy = []
+    batch_loss = []
+    batch_accuracy = []
+    for i, (state, action) in enumerate(dataloader):
+        optimizer.zero_grad()
+        # bsz, seqlen, statedim = state.shape
+        # bsz, seqlen = action.shape
+        state = state.flatten(start_dim=1)
+        action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
+        action_onehot[:, -num_actions:] = 0
+        state = torch.hstack([state, action_onehot.float()])
 
-    for epoch in range(num_epochs):
-        batch_loss = []
-        batch_accuracy = []
-        for i, (state, action) in enumerate(dataloader):
-            optimizer.zero_grad()
-            # bsz, seqlen, statedim = state.shape
-            # bsz, seqlen = action.shape
-            state = state.flatten(start_dim=1)
-            action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
-            action_onehot[:, -num_actions:] = 0
-            state = torch.hstack([state, action_onehot.float()])
-
-            output = model(state)
-            agent_output = output
-            agent_action = action[:, -1]
-            loss = criterion(agent_output, agent_action)
-            accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
-            loss.backward()
-            optimizer.step()
-            batch_loss.append(loss.item())
-            batch_accuracy.append(accuracy)
-
-        epoch_loss.append(np.mean(batch_loss))
-        epoch_accuracy.append(np.mean(batch_accuracy))
-
-        # print both the average and last epoch loss and accuracy
-        print(f"Epoch {epoch+1}/{num_epochs}, Mean Loss: {np.mean(batch_loss):.4f}, Mean Accuracy: {np.mean(batch_accuracy):.4f}\
-            , Last Loss: {batch_loss[-1]:.4f}, Last Accuracy: {batch_accuracy[-1]:.4f}")
-        wandb.log({"epoch": epoch, "loss": np.mean(batch_loss), "accuracy": np.mean(batch_accuracy)})
+        output = model(state)
+        agent_output = output
+        agent_action = action[:, -1]
+        loss = criterion(agent_output, agent_action)
+        accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
+        loss.backward()
+        optimizer.step()
+        batch_loss.append(loss.item())
+        batch_accuracy.append(accuracy)
         
-    return epoch_loss, epoch_accuracy
+    return np.mean(batch_loss), np.mean(batch_accuracy)
 
 
 def get_data_loader(data, sequence_length):
@@ -136,6 +125,21 @@ if __name__ == "__main__":
     data_hashes = ["data_e94dbedcea", "data_8950a6aae5", "data_d4588ac462"]
     sequence_lengths = [4, 8, 16, 32]
     w_d = [(32, 1), (64, 2), (128, 4), (256, 8)]
+    num_epochs = 10
+
+    df = pd.DataFrame(columns=[
+    "data_hash", 
+    "num_agents", 
+    "num_groups", 
+    "state_dim", 
+    "num_actions", 
+    "sequence_length", 
+    "hidden_size", 
+    "num_hidden_layers", 
+    "epoch", 
+    "loss", 
+    "accuracy"
+    ])
 
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
@@ -147,5 +151,28 @@ if __name__ == "__main__":
                 time_str = time.strftime("%Y-%m-%d-%H-%M")
                 dataloader = get_data_loader(data, sequence_length)
                 mlp = get_model(dataloader, num_actions, hidden_size, num_hidden_layers)
-                epoch_loss, epoch_accuracy = train(mlp, dataloader, num_epochs=10, num_actions=num_actions)
+
+                for epoch in range(num_epochs):
+                    epoch_loss, epoch_accuracy = train(mlp, dataloader, num_actions=num_actions)
+                            # print both the average and last epoch loss and accuracy
+                    print(f"Epoch {epoch+1}/{num_epochs}, Mean Loss: {epoch_loss:.4f}, Mean Accuracy: {epoch_accuracy:.4f}")
+                    wandb.log({"epoch": epoch, "loss": epoch_loss, "accuracy": epoch_accuracy})
+                    # Append the data to the DataFrame
+                    new_row = pd.DataFrame({
+                        "data_hash": [data_hash],
+                        "num_agents": [config["file_attrs"]["num_teachers"]],
+                        "num_groups": [config["file_attrs"]["num_groups"]],
+                        "state_dim": [config["file_attrs"]["dim_state"]],
+                        "num_actions": [num_actions],
+                        "sequence_length": [sequence_length],
+                        "hidden_size": [hidden_size],
+                        "num_hidden_layers": [num_hidden_layers],
+                        "epoch": [epoch],
+                        "loss": [epoch_loss],
+                        "accuracy": [epoch_accuracy]
+                    }, index=[0])
+                    df = pd.concat([df, new_row], ignore_index=True)
+
                 wandb.finish()
+
+    df.to_csv("beta/results.csv", index=False)
