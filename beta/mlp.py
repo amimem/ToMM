@@ -233,11 +233,6 @@ if __name__ == "__main__":
                     }, index=[0])
                     df = pd.concat([df, new_row], ignore_index=True)
                     wandb.finish()
-                    break
-                wandb.finish()
-                break
-            break
-        break
 
     time_str = time.strftime("%Y-%m-%d-%H-%M")
     df.to_csv(f"output/{time_str}_results.csv", index=False)
