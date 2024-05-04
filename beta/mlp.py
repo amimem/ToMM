@@ -9,6 +9,7 @@ import yaml
 import torch
 import wandb
 import time
+import os
 
 def load_data(data_hash, data_seed=0):
     data_dir = f"output/{data_hash}"
@@ -49,10 +50,17 @@ class MLP(nn.Module):
 # create a Dataset object
 class CustomDataset(Dataset):
     def __init__(self, states, actions, sequence_length):
+        self.train = True
         self.states = [torch.tensor(states[i:i+sequence_length]).float() for i in range(len(states) - sequence_length + 1)]
         self.actions = [torch.tensor(actions[i:i+sequence_length]).long() for i in range(len(actions) - sequence_length + 1)]
         self.sequence_length = sequence_length
         self.num_agents = actions.shape[1]
+        self.train_agents = np.random.randint(0, self.num_agents, size=len(self.states))
+        self.validation_agents = np.random.randint(0, self.num_agents, size=len(self.states))
+        for i, (t,v) in enumerate(zip(self.train_agents, self.validation_agents)):
+            if t == v:
+                self.validation_agents[i] = (v + 1) % self.num_agents
+
         # self.num_agents = min(2, actions.shape[1])
 
     def __len__(self):
@@ -60,8 +68,11 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         # random sample x from the number of agents
-        x = np.random.randint(self.num_agents)
-        return self.states[idx], self.actions[idx][:, x]
+        if self.train:
+            split = self.train_agents
+        else:
+            split = self.validation_agents
+        return self.states[idx], self.actions[idx][:, split[idx]]
     
 def train(model, dataloader, num_actions=2):
 
@@ -121,10 +132,17 @@ def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_
     return mlp
 
 if __name__ == "__main__":
-    # data_hashes = ["data_d4588ac462", "data_50d7e14370", "data_076e93c9c2"]
-    data_hashes = ["data_e94dbedcea", "data_8950a6aae5", "data_d4588ac462"]
-    sequence_lengths = [4, 8, 16, 32]
-    w_d = [(32, 1), (64, 2), (128, 4), (256, 8)]
+    data_hashes = ["data_6013b64ce8", "data_dfdaecc3ee", "data_8646a4bdd8", "data_e94dbedcea",\
+                    "data_813427ec72", "data_fbe4154fff", "data_d4fcf6cdef", "data_8950a6aae5",\
+                    "data_97b6c3ab33", "data_d8fd9e8472", "data_fcb20c7d4a", "data_e8cbc57b61",\
+                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"]
+    
+    # make sure all data_hashes are in the output folder
+    assert all([os.path.exists(f"output/{data_hash}") for data_hash in data_hashes])
+    print("All data hashes are in the output folder")
+
+    sequence_lengths = np.arange(1, 17)
+    w_d = [(128, 2)]
     num_epochs = 10
 
     df = pd.DataFrame(columns=[
@@ -145,10 +163,9 @@ if __name__ == "__main__":
         for sequence_length in sequence_lengths:
             for hidden_size, num_hidden_layers in w_d:
                 data, config = load_data(data_hash)
-                wandb.init(project="MLP", group="May_3rd", job_type=None, config=config)
+                wandb.init(project="MLP", group="May_4th", job_type=None, config=config)
                 num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
-                time_str = time.strftime("%Y-%m-%d-%H-%M")
                 dataloader = get_data_loader(data, sequence_length)
                 mlp = get_model(dataloader, num_actions, hidden_size, num_hidden_layers)
 
@@ -172,7 +189,7 @@ if __name__ == "__main__":
                         "accuracy": [epoch_accuracy]
                     }, index=[0])
                     df = pd.concat([df, new_row], ignore_index=True)
+                    wandb.finish()
 
-                wandb.finish()
-
-    df.to_csv("beta/results.csv", index=False)
+    time_str = time.strftime("%Y-%m-%d-%H-%M")
+    df.to_csv(f"output/{time_str}_results.csv", index=False)
