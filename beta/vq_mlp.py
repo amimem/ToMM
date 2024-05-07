@@ -10,6 +10,7 @@ import torch
 import wandb
 import time
 import os
+from utils import VectorQuantizer
 
 # get slurm job array index
 try:
@@ -49,20 +50,21 @@ def load_data(data_hash, data_seed=0):
 
 # Define the MLP architecture
 class MLP(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_hidden_layers=2):
+    def __init__(self, input_size, hidden_size, output_size, num_hidden_layers=2, num_embeddings=64, embedding_dim=64, commitment_cost=0.25):
         super(MLP, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            *[nn.Sequential(
-                nn.Linear(hidden_size, hidden_size),
-                nn.ReLU()
-            ) for _ in range(num_hidden_layers)],
-            nn.Linear(hidden_size, output_size)
-        )
+        self.input_layer = nn.Linear(input_size, hidden_size) # input_size: sequence_length * (state_dim + num_actions)
+        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=embedding_dim, commitment_cost=commitment_cost)
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_hidden_layers)])
+        self.output_layer = nn.Linear(hidden_size, output_size)
+        self.activation = nn.ReLU()
 
     def forward(self, x):
-        return self.model(x)
+        x = self.activation(self.input_layer(x))
+        x, vq_loss = self.vq(x)
+        for hidden_layer in self.hidden_layers:
+            x = self.activation(hidden_layer(x))
+        x = self.output_layer(x)
+        return x, vq_loss
 
 # create a Dataset object
 class CustomDataset(Dataset):
@@ -159,14 +161,16 @@ def get_data_loader(data, sequence_length):
 def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_epochs=10):
 
     state, action = next(iter(dataloader))
-    state = state.flatten(start_dim=1)
-    action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
-    state = torch.hstack([state, action_onehot.float()])
+    # state shape: (batch_size, sequence_length, state_dim)
+    # action shape: (batch_size, sequence_length)
+    state = state.flatten(start_dim=1) # (batch_size, sequence_length * state_dim)
+    action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1) # (batch_size, sequence_length * num_actions)
+    state = torch.hstack([state, action_onehot.float()]) # (batch_size, sequence_length * (state_dim + num_actions))
 
     # Create an instance of the MLP
-    input_size = state.shape[1]
-    hidden_size = hidden_size
-    num_hidden_layers = num_hidden_layers
+    input_size = state.shape[1] # sequence_length * (state_dim + num_actions)
+    hidden_size = hidden_size # hidden_size
+    num_hidden_layers = num_hidden_layers # num_hidden_layers
     num_epochs = num_epochs
 
     mlp = MLP(input_size, hidden_size, num_actions, num_hidden_layers)      

@@ -197,3 +197,43 @@ def get_width(config):
     else:
         print('choose valid model name')
     return W
+
+class VectorQuantizer(nn.Module):
+    def __init__(self, num_embeddings, embedding_dim, commitment_cost = 0.25):
+        super().__init__()
+        self.commitment_cost = commitment_cost
+        self.num_embeddings = num_embeddings
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+        self.reset_parameters()
+
+    def forward(self, latents):
+        # latent shape: (batch_size, sequence_length * (state_dim + num_actions))
+        # embedding shape: (N_e, D_e)
+        # Compute L2 distances between latents and embedding weights
+        weights = self.embedding.weight # weights shape: (N_e, D_e)
+        sub = latents.unsqueeze(-2) - weights # latents shape: (batch_size, num_abs_agents, 1, abs_action_space_dim), sub shape: (batch_size, num_abs_agents, N_e, abs_action_space_dim)
+        dist = torch.linalg.vector_norm(sub, dim=-1) # dist shape: (batch_size, num_abs_agents x N_e)
+        encoding_inds = torch.argmin(dist, dim=-1)        # Get the number of the nearest codebook vector, shape (batch_size x num_abs_agents)
+        quantized_latents = self.quantize(encoding_inds)  # Quantize the latents of shape (batch_size, num_abs_agents x abs_action_space_dim)
+
+        # Compute the VQ Losses
+        codebook_loss = F.mse_loss(latents.detach(), quantized_latents)
+        commitment_loss = F.mse_loss(latents, quantized_latents.detach())
+        vq_loss = codebook_loss + self.commitment_cost * commitment_loss
+
+        # get a new version loss as row wise dot product of latents and quantized latents
+        dot_loss = torch.sum(latents*quantized_latents, dim=-1) # shape: (batch_size, num_abs_agents)
+        softmax_loss = F.softmax(dot_loss, dim=-1) # shape: (batch_size, num_abs_agents)
+        vq_loss = torch.sum(softmax_loss)
+        
+        # Make the gradient with respect to latents be equal to the gradient with respect to quantized latents 
+        quantized_latents = latents + (quantized_latents - latents).detach()
+        return quantized_latents, vq_loss
+    
+    def quantize(self, encoding_indices):
+        z = self.embedding(encoding_indices) # z shape: (batch_size, abs_action_space_dim)
+        return z
+    
+    def reset_parameters(self):
+        # use the default normal initialization
+        pass
