@@ -11,6 +11,13 @@ import wandb
 import time
 import os
 
+# get slurm job array index
+try:
+    job_id = int(os.getenv('SLURM_ARRAY_TASK_ID'))
+except:
+    job_id = -1
+    print("Not running on a cluster")
+    exit()
 
 seed = 0
 
@@ -168,18 +175,30 @@ def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_
 
 if __name__ == "__main__":
     set_seed(seed)
+
+    # for n_agents and n_groups = n_agents
     data_hashes = ["data_6013b64ce8", "data_dfdaecc3ee", "data_8646a4bdd8", "data_e94dbedcea",\
                     "data_813427ec72", "data_fbe4154fff", "data_d4fcf6cdef", "data_8950a6aae5",\
                     "data_97b6c3ab33", "data_d8fd9e8472", "data_fcb20c7d4a", "data_e8cbc57b61",\
-                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"]
+                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"] + \
+                   ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
+                    "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
+                    "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
+                    "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
+    
+    
+    # data_hashes = ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
+    #                 "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
+    #                 "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
+    #                 "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"] # for n_agents and n_groups = 1
     
     # make sure all data_hashes are in the output folder
     assert all([os.path.exists(f"output/{data_hash}") for data_hash in data_hashes])
     print("All data hashes are in the output folder")
 
-    sequence_lengths = np.arange(1, 17)
+    sequence_lengths = [8]
     w_d = [(128, 2)]
-    num_epochs = 10
+    num_epochs = 20
 
     df = pd.DataFrame(columns=[
     "data_hash", 
@@ -195,13 +214,18 @@ if __name__ == "__main__":
     "accuracy"
     ])
 
+    # sequence_lengths = [sequence_lengths[job_id]]
+    # print(f"Running sequence length {sequence_lengths}")
+
+    data_hashes = [data_hashes[job_id]]
+
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
             for hidden_size, num_hidden_layers in w_d:
                 data, config = load_data(data_hash)
-                wandb.init(project="MLP", group="May_4th", job_type=None, config=config)
                 num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
+                wandb.init(project="MLP", group="May_7th_seq_8", job_type=None, config=config)
                 train_dataloader, test_dataloader = get_data_loader(data, sequence_length)
                 mlp = get_model(train_dataloader, num_actions, hidden_size, num_hidden_layers)
 
