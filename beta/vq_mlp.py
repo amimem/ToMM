@@ -18,7 +18,6 @@ try:
 except:
     job_id = -1
     print("Not running on a cluster")
-    exit()
 
 seed = 0
 
@@ -221,7 +220,8 @@ if __name__ == "__main__":
     # sequence_lengths = [sequence_lengths[job_id]]
     # print(f"Running sequence length {sequence_lengths}")
 
-    data_hashes = [data_hashes[job_id]]
+    if job_id != -1:
+        data_hashes = [data_hashes[job_id]]
 
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
