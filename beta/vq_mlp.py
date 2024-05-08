@@ -3,14 +3,54 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import torch.nn as nn
 import torch.optim as optim
-import torch.functional as F
+import torch.nn.functional as F
 import h5py
 import yaml
 import torch
 import wandb
 import time
 import os
-from utils import VectorQuantizer
+
+class VectorQuantizer(nn.Module):
+    def __init__(self, num_embeddings, embedding_dim, commitment_cost = 0.25):
+        super().__init__()
+        self.commitment_cost = commitment_cost
+        self.num_embeddings = num_embeddings
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+        self.reset_parameters()
+
+    def forward(self, latents):
+        # latent shape: (batch_size, D_hidden_layer)
+        # embedding shape: (N_e, D_e)
+        # Compute L2 distances between latents and embedding weights
+        weights = self.embedding.weight # weights shape: (N_e, D_hidden_layer)
+        sub = latents.unsqueeze(-2) - weights # latents shape: (batch_size, 1, D_hidden_layer), sub shape: (batch_size, N_e, D_hidden_layer)
+        dist = torch.linalg.vector_norm(sub, dim=-1) # dist shape: (batch_size, N_e)
+        encoding_inds = torch.argmin(dist, dim=-1)        # Get the number of the nearest codebook vector, shape: (batch_size)
+        quantized_latents = self.quantize(encoding_inds)  # Quantize the latents of shape (batch_size, D_hidden_layer)
+
+        # Compute the VQ Losses
+        codebook_loss = F.mse_loss(latents.detach(), quantized_latents)
+        commitment_loss = F.mse_loss(latents, quantized_latents.detach())
+        vq_loss = codebook_loss + self.commitment_cost * commitment_loss
+
+        # get a new version loss as row wise dot product of latents and quantized latents
+        # dot_loss = torch.sum(latents*quantized_latents, dim=-1) # shape: (batch_size)
+        # softmax_loss = F.softmax(dot_loss, dim=-1) # shape: (batch_size)
+        # vq_loss = torch.sum(softmax_loss)
+        
+        # Make the gradient with respect to latents be equal to the gradient with respect to quantized latents 
+        quantized_latents = latents + (quantized_latents - latents).detach()
+        return quantized_latents, vq_loss
+    
+    def quantize(self, encoding_indices):
+        z = self.embedding(encoding_indices) # z shape: (batch_size, abs_action_space_dim)
+        return z
+    
+    def reset_parameters(self):
+        # use the default normal initialization
+        pass
+
 
 # get slurm job array index
 try:
@@ -49,10 +89,10 @@ def load_data(data_hash, data_seed=0):
 
 # Define the MLP architecture
 class MLP(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_hidden_layers=2, num_embeddings=64, embedding_dim=64, commitment_cost=0.25):
+    def __init__(self, input_size, hidden_size, output_size, num_hidden_layers=2, num_embeddings=12, commitment_cost=0.25):
         super(MLP, self).__init__()
         self.input_layer = nn.Linear(input_size, hidden_size) # input_size: sequence_length * (state_dim + num_actions)
-        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=embedding_dim, commitment_cost=commitment_cost)
+        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=hidden_size, commitment_cost=commitment_cost)
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_hidden_layers)])
         self.output_layer = nn.Linear(hidden_size, output_size)
         self.activation = nn.ReLU()
@@ -98,6 +138,7 @@ def train(model, dataloader, num_actions=2):
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
     batch_loss = []
+    batch_vq_loss = []
     batch_accuracy = []
     for i, (state, action) in enumerate(dataloader):
         optimizer.zero_grad()
@@ -108,22 +149,24 @@ def train(model, dataloader, num_actions=2):
         action_onehot[:, -num_actions:] = 0
         state = torch.hstack([state, action_onehot.float()])
 
-        output = model(state)
+        output, vq_loss = model(state)
         agent_output = output
         agent_action = action[:, -1]
-        loss = criterion(agent_output, agent_action)
+        loss = criterion(agent_output, agent_action) + vq_loss
         accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
         loss.backward()
         optimizer.step()
         batch_loss.append(loss.item())
+        batch_vq_loss.append(vq_loss.item())
         batch_accuracy.append(accuracy)
         
-    return np.mean(batch_loss), np.mean(batch_accuracy)
+    return np.mean(batch_loss), np.mean(batch_accuracy), np.mean(batch_vq_loss)
 
 def test(model, dataloader, num_actions=2):
     model.eval()
     criterion = nn.CrossEntropyLoss()
     batch_loss = []
+    batch_vq_loss = []
     batch_accuracy = []
     for i, (state, action) in enumerate(dataloader):
         # bsz, seqlen, statedim = state.shape
@@ -133,15 +176,16 @@ def test(model, dataloader, num_actions=2):
         action_onehot[:, -num_actions:] = 0
         state = torch.hstack([state, action_onehot.float()])
 
-        output = model(state)
+        output, vq_loss = model(state)
         agent_output = output
         agent_action = action[:, -1]
-        loss = criterion(agent_output, agent_action)
+        loss = criterion(agent_output, agent_action) + vq_loss
         accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
         batch_loss.append(loss.item())
+        batch_vq_loss.append(vq_loss.item())
         batch_accuracy.append(accuracy)
         
-    return np.mean(batch_loss), np.mean(batch_accuracy)
+    return np.mean(batch_loss), np.mean(batch_accuracy), np.mean(batch_vq_loss)
 
 
 def get_data_loader(data, sequence_length):
@@ -183,11 +227,12 @@ if __name__ == "__main__":
     data_hashes = ["data_6013b64ce8", "data_dfdaecc3ee", "data_8646a4bdd8", "data_e94dbedcea",\
                     "data_813427ec72", "data_fbe4154fff", "data_d4fcf6cdef", "data_8950a6aae5",\
                     "data_97b6c3ab33", "data_d8fd9e8472", "data_fcb20c7d4a", "data_e8cbc57b61",\
-                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"] + \
-                   ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
-                    "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
-                    "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
-                    "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
+                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"]
+                    # + \
+                #    ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
+                #     "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
+                #     "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
+                #     "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
     
     
     # data_hashes = ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
@@ -229,20 +274,22 @@ if __name__ == "__main__":
                 data, config = load_data(data_hash)
                 num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
-                wandb.init(project="MLP", group="May_7th_seq_8", job_type=None, config=config)
+                wandb.init(project="MLP", group="May_7th_vq_test", job_type=None, config=config)
                 train_dataloader, test_dataloader = get_data_loader(data, sequence_length)
                 mlp = get_model(train_dataloader, num_actions, hidden_size, num_hidden_layers)
 
                 for epoch in range(num_epochs):
                     # train the model
-                    train_epoch_loss, train_epoch_accuracy = train(mlp, train_dataloader, num_actions=num_actions)
+                    train_epoch_loss, train_epoch_accuracy, train_epoch_vq_loss = train(mlp, train_dataloader, num_actions=num_actions)
                     # test the model
-                    test_epoch_loss, test_epoch_accuracy = test(mlp, test_dataloader, num_actions=num_actions)
-                    # print both the average and last epoch loss and accuracy
-                    print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_epoch_loss:.4f}, Train Accuracy: {train_epoch_accuracy:.4f},\
-                          Test Loss: {test_epoch_loss:.4f}, Test Accuracy: {test_epoch_accuracy:.4f}")
+                    test_epoch_loss, test_epoch_accuracy, test_epoch_vq_loss = test(mlp, test_dataloader, num_actions=num_actions)
+                    # print both the train and test epoch loss and accuracy and vq_loss
+                    print(f"Epoch: {epoch}, Train Loss: {train_epoch_loss}, Train Accuracy: {train_epoch_accuracy}, Train VQ Loss: {train_epoch_vq_loss}")
+                    print(f"Epoch: {epoch}, Test Loss: {test_epoch_loss}, Test Accuracy: {test_epoch_accuracy}, Test VQ Loss: {test_epoch_vq_loss}")
+
                     wandb.log({"epoch": epoch, "train_loss": train_epoch_loss, "train_accuracy": train_epoch_accuracy, \
-                                "test_loss": test_epoch_loss, "test_accuracy": test_epoch_accuracy})
+                                "test_loss": test_epoch_loss, "test_accuracy": test_epoch_accuracy, \
+                                    "train_vq_loss": train_epoch_vq_loss, "test_vq_loss": test_epoch_vq_loss})
                     # Append the data to the DataFrame
                     new_row = pd.DataFrame({
                         "data_hash": [data_hash],
@@ -257,7 +304,9 @@ if __name__ == "__main__":
                         "train_loss": [train_epoch_loss],
                         "train_accuracy": [train_epoch_accuracy],
                         "test_loss": [test_epoch_loss],
-                        "test_accuracy": [test_epoch_accuracy]
+                        "test_accuracy": [test_epoch_accuracy],
+                        "train_vq_loss": [train_epoch_vq_loss],
+                        "test_vq_loss": [test_epoch_vq_loss]
                     }, index=[0])
                     df = pd.concat([df, new_row], ignore_index=True)
                 wandb.finish()
