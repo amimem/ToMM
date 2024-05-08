@@ -225,7 +225,7 @@ if __name__ == "__main__":
                 data, config = load_data(data_hash)
                 num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
-                wandb.init(project="MLP", group="May_7th_seq_8", job_type=None, config=config)
+                wandb.init(project="MLP", group="May_7th_no_vq", job_type=None, config=config)
                 train_dataloader, test_dataloader = get_data_loader(data, sequence_length)
                 mlp = get_model(train_dataloader, num_actions, hidden_size, num_hidden_layers)
 

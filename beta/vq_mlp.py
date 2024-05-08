@@ -89,19 +89,22 @@ def load_data(data_hash, data_seed=0):
 
 # Define the MLP architecture
 class MLP(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_hidden_layers=2, num_embeddings=12, commitment_cost=0.25):
+    def __init__(self, input_size, hidden_size, output_size, num_embeddings=12, commitment_cost=0.25):
         super(MLP, self).__init__()
+        # solve z for the equation: 2*hidden_size*z + num_embeddings*z = hidden_size**2
+        z = hidden_size**2 // (2*hidden_size + num_embeddings)
         self.input_layer = nn.Linear(input_size, hidden_size) # input_size: sequence_length * (state_dim + num_actions)
-        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=hidden_size, commitment_cost=commitment_cost)
-        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_hidden_layers)])
+        self.hidden_layer_1 = nn.Linear(hidden_size, z)
+        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=z, commitment_cost=commitment_cost)
+        self.hidden_layer_2 = nn.Linear(z, hidden_size)
         self.output_layer = nn.Linear(hidden_size, output_size)
         self.activation = nn.ReLU()
 
     def forward(self, x):
         x = self.activation(self.input_layer(x))
+        x = self.activation(self.hidden_layer_1(x))
         x, vq_loss = self.vq(x)
-        for hidden_layer in self.hidden_layers:
-            x = self.activation(hidden_layer(x))
+        x = self.activation(self.hidden_layer_2(x))
         x = self.output_layer(x)
         return x, vq_loss
 
@@ -201,7 +204,7 @@ def get_data_loader(data, sequence_length):
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
     return train_dataloader, test_dataloader
 
-def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_epochs=10):
+def get_model(dataloader, num_actions: int, hidden_size=64, num_groups=2, num_epochs=10):
 
     state, action = next(iter(dataloader))
     # state shape: (batch_size, sequence_length, state_dim)
@@ -213,10 +216,13 @@ def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_
     # Create an instance of the MLP
     input_size = state.shape[1] # sequence_length * (state_dim + num_actions)
     hidden_size = hidden_size # hidden_size
-    num_hidden_layers = num_hidden_layers # num_hidden_layers
+    # num_hidden_layers = num_hidden_layers # num_hidden_layers
     num_epochs = num_epochs
 
-    mlp = MLP(input_size, hidden_size, num_actions, num_hidden_layers)      
+    # find the closest power 2 to the number of groups (upper bound)
+    num_embeddings = 2**np.ceil(np.log2(num_groups))
+
+    mlp = MLP(input_size, hidden_size, num_actions, num_embeddings)      
 
     return mlp
 
@@ -227,12 +233,12 @@ if __name__ == "__main__":
     data_hashes = ["data_6013b64ce8", "data_dfdaecc3ee", "data_8646a4bdd8", "data_e94dbedcea",\
                     "data_813427ec72", "data_fbe4154fff", "data_d4fcf6cdef", "data_8950a6aae5",\
                     "data_97b6c3ab33", "data_d8fd9e8472", "data_fcb20c7d4a", "data_e8cbc57b61",\
-                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"]
-                    # + \
-                #    ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
-                #     "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
-                #     "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
-                #     "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
+                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"] \
+                    + \
+                   ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
+                    "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
+                    "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
+                    "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
     
     
     # data_hashes = ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
@@ -245,7 +251,7 @@ if __name__ == "__main__":
     print("All data hashes are in the output folder")
 
     sequence_lengths = [8]
-    w_d = [(128, 2)]
+    w = [128]
     num_epochs = 20
 
     df = pd.DataFrame(columns=[
@@ -270,13 +276,14 @@ if __name__ == "__main__":
 
     for data_hash in data_hashes:
         for sequence_length in sequence_lengths:
-            for hidden_size, num_hidden_layers in w_d:
+            for hidden_size in w:
                 data, config = load_data(data_hash)
                 num_actions = config["file_attrs"]["num_actions"]
-                config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
-                wandb.init(project="MLP", group="May_7th_vq_test", job_type=None, config=config)
+                num_groups = config["file_attrs"]["num_groups"]
+                config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": 3})
+                wandb.init(project="MLP", group="May_7th_vq", job_type=None, config=config)
                 train_dataloader, test_dataloader = get_data_loader(data, sequence_length)
-                mlp = get_model(train_dataloader, num_actions, hidden_size, num_hidden_layers)
+                mlp = get_model(train_dataloader, num_actions, hidden_size, num_groups)
 
                 for epoch in range(num_epochs):
                     # train the model
@@ -299,7 +306,7 @@ if __name__ == "__main__":
                         "num_actions": [num_actions],
                         "sequence_length": [sequence_length],
                         "hidden_size": [hidden_size],
-                        "num_hidden_layers": [num_hidden_layers],
+                        "num_hidden_layers": [3],
                         "epoch": [epoch],
                         "train_loss": [train_epoch_loss],
                         "train_accuracy": [train_epoch_accuracy],

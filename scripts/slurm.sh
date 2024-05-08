@@ -3,12 +3,12 @@
 
 #SBATCH --cpus-per-task=1  # Refer to cluster's documentation for the right CPU/GPU ratio
 #SBATCH --mem=8GB       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
-#SBATCH --time=0-01:00:00     # DD-HH:MM:SS
+#SBATCH --time=0-02:00:00     # DD-HH:MM:SS
 #SBATCH --partition=unkillable
 #SBATCH -o ./scratch/slurm_out/slurm-%j-%a.out
 #SBATCH -e ./scratch/slurm_out/slurm-%j-%a.err
 
-#SBATCH --array=0-31
+## SBATCH --array=0-31
 
 module load python/3.10.lua
 module load cudatoolkit/12.3.2
@@ -40,6 +40,7 @@ export WANDB_DIR=$SCRATCH/wandb
 # scratch/output/data_45dd5039c4 # 1000
 # scratch/output/data_2a6573283c # 10000
 python beta/mlp.py
+python beta/vq_mlp.py
 
 # echo "Starting task $SLURM_ARRAY_TASK_ID"
 # command=$(sed -n "${SLURM_ARRAY_TASK_ID}p" $HOME/abstraction/scripts/commands.txt)
