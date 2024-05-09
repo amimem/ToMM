@@ -179,7 +179,6 @@ def train(model, dataloader, num_actions=2):
         state = torch.hstack([state, action_onehot.float()]) 
 
         output, vq_loss = model(state)
-        agent_output = output
 
         # check the percentage of the logits that are negative
         # print(f"Percentage of negative logits: {torch.sum(output < 0).item() / output.numel()}")
@@ -188,11 +187,9 @@ def train(model, dataloader, num_actions=2):
         wandb.log({"logits_histogram": wandb.Histogram(output.flatten().detach().cpu().numpy())})
 
         agent_action = action[:, -1]
-        # loss = criterion(agent_output, agent_action) \
-        agent_output.reshape(agent_output.shape[0], -1)
-        loss = criterion(agent_output, state) \
+        loss = criterion(output, agent_action) \
             + vq_loss
-        accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
+        accuracy = (torch.argmax(output, dim=1) == agent_action).float().mean().item()
         loss.backward()
         optimizer.step()
         batch_loss.append(loss.item())
@@ -221,12 +218,10 @@ def test(model, dataloader, num_actions=2):
         state = torch.hstack([state, action_onehot.float()])
 
         output, vq_loss = model(state)
-        agent_output = output
         agent_action = action[:, -1]
-        # loss = criterion(agent_output, agent_action) \
-        loss = criterion(agent_output, state) \
+        loss = criterion(output, agent_action) \
             + vq_loss
-        accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
+        accuracy = (torch.argmax(output, dim=1) == agent_action).float().mean().item()
         batch_loss.append(loss.item())
         batch_vq_loss.append(vq_loss.item())
         batch_accuracy.append(accuracy)
@@ -249,12 +244,12 @@ def get_data_loader(data, sequence_length):
 
 def get_model(dataloader, num_actions: int, hidden_size=64, num_groups=2, num_hidden_layers=2):
 
-    _, action = next(iter(dataloader))
+    state, action = next(iter(dataloader))
     # state shape: (batch_size, sequence_length, state_dim)
     # action shape: (batch_size, sequence_length)
-    # state = state.flatten(start_dim=1) # (batch_size, sequence_length * state_dim)
+    state = state.flatten(start_dim=1) # (batch_size, sequence_length * state_dim)
     action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1) # (batch_size, sequence_length * num_actions)
-    state = torch.hstack([action_onehot.float()]) # (batch_size, sequence_length * (state_dim + num_actions))
+    state = torch.hstack([state, action_onehot.float()]) # (batch_size, sequence_length * (state_dim + num_actions))
 
     # Create an instance of the MLP
     input_size = state.shape[1] # sequence_length * (state_dim + num_actions)
