@@ -263,7 +263,7 @@ def get_model(dataloader, num_actions: int, hidden_size=64, num_groups=2, num_hi
     # num_embeddings = 2**np.ceil(np.log2(num_groups))
     num_embeddings = hidden_size
 
-    mlp = MLP(input_size, hidden_size, input_size, num_embeddings, num_hidden_layers)      
+    mlp = MLP(input_size, hidden_size, num_actions, num_embeddings, num_hidden_layers)      
 
     return mlp
 
