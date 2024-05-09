@@ -20,14 +20,16 @@ class VectorQuantizer(nn.Module):
         self.reset_parameters()
 
     def forward(self, latents):
-        # latent shape: (batch_size, D_hidden_layer)
+        # latent shape: (batch_size, D_hidden_layer/2)
+        # reshape latents to (batch_size, D_hidden_layer/16, D_hidden_layer/16)
+        latents = latents.reshape(latents.shape[0], -1, latents.shape[-1]//16)
         # embedding shape: (N_e, D_e)
         # Compute L2 distances between latents and embedding weights
-        weights = self.embedding.weight # weights shape: (N_e, D_hidden_layer)
-        sub = latents.unsqueeze(-2) - weights # latents shape: (batch_size, 1, D_hidden_layer), sub shape: (batch_size, N_e, D_hidden_layer)
-        dist = torch.linalg.vector_norm(sub, dim=-1) # dist shape: (batch_size, N_e)
-        encoding_inds = torch.argmin(dist, dim=-1)        # Get the number of the nearest codebook vector, shape: (batch_size)
-        quantized_latents = self.quantize(encoding_inds)  # Quantize the latents of shape (batch_size, D_hidden_layer)
+        weights = self.embedding.weight # weights shape: (N_e, D_hidden_layer/16)
+        sub = latents.unsqueeze(-2) - weights # latents shape: (batch_size, D_hidden_layer/16, 1, D_hidden_layer/16), weights shape: (N_e, D_hidden_layer/16)
+        dist = torch.linalg.vector_norm(sub, dim=-1) # dist shape: (batch_size, D_hidden_layer/16, N_e)
+        encoding_inds = torch.argmin(dist, dim=-1)        # Get the number of the nearest codebook vector, shape: (batch_size, D_hidden_layer/16)
+        quantized_latents = self.quantize(encoding_inds)  # Quantize the latents of shape (batch_size, D_hidden_layer/16, D_hidden_layer/16)
 
         # Compute the VQ Losses
         codebook_loss = F.mse_loss(latents.detach(), quantized_latents)
@@ -41,10 +43,11 @@ class VectorQuantizer(nn.Module):
         
         # Make the gradient with respect to latents be equal to the gradient with respect to quantized latents 
         quantized_latents = latents + (quantized_latents - latents).detach()
+        quantized_latents = quantized_latents.reshape(quantized_latents.shape[0], quantized_latents.shape[-1]*quantized_latents.shape[-2])
         return quantized_latents ,vq_loss
     
     def quantize(self, encoding_indices):
-        z = self.embedding(encoding_indices) # z shape: (batch_size, D_hidden_layer)
+        z = self.embedding(encoding_indices) # z shape: (batch_size, D_hidden_layer/16)
         return z
     
     def reset_parameters(self):
@@ -92,7 +95,8 @@ class MLP(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, num_embeddings=12, num_hidden_layers=2, commitment_cost=0.25, ):
         super(MLP, self).__init__()
         # solve z for the equation: 2*hidden_size*z + num_embeddings*z = hidden_size**2
-        z = int(hidden_size**2 // (2*hidden_size + num_embeddings))
+        # z = int(hidden_size**2 // (2*hidden_size + num_embeddings))
+        z = hidden_size
 
         # make sure num_embeddings is a even
         if num_embeddings % 2 != 0:
@@ -103,11 +107,12 @@ class MLP(nn.Module):
         self.input_layer = nn.Linear(input_size, hidden_size) # input_size: sequence_length * (state_dim + num_actions)
         self.hidden_layer_1 = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(half_num_hidden_layers)])
         self.hidden_project_in = nn.Linear(hidden_size, z)
-        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=z, commitment_cost=commitment_cost)
+        self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=16, commitment_cost=commitment_cost)
         # self.vq = nn.Linear(z, z) 
         # VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=z, commitment_cost=commitment_cost)
         self.hidden_project_out = nn.Linear(z, hidden_size)
         self.hidde_layer_2 = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(half_num_hidden_layers)])
+        self.layer_norm = nn.LayerNorm(hidden_size)
         self.output_layer = nn.Linear(hidden_size, output_size)
         # self.output_sigmoid = nn.Sigmoid()
         self.activation = nn.ReLU()
@@ -121,8 +126,8 @@ class MLP(nn.Module):
         x = self.activation(self.hidden_project_out(x))
         for layer in self.hidde_layer_2:
             x = self.activation(layer(x))
+        x = self.layer_norm(x)
         x = self.output_layer(x)
-        # x = self.output_sigmoid(x)
         return x, vq_loss
 
 # create a Dataset object
@@ -156,7 +161,9 @@ def train(model, dataloader, num_actions=2):
     model.train()
     # criterion = nn.CrossEntropyLoss()
     # criterion = nn.MSELoss()
-    criterion = nn.BCEWithLogitsLoss()
+    sequence_length = dataloader.dataset.sequence_length
+    pos_weight = torch.ones([num_actions * sequence_length]) * 10  # replace 'n' with the weight you want to use
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
     batch_loss = []
@@ -173,8 +180,16 @@ def train(model, dataloader, num_actions=2):
 
         output, vq_loss = model(state)
         agent_output = output
+
+        # check the percentage of the logits that are negative
+        # print(f"Percentage of negative logits: {torch.sum(output < 0).item() / output.numel()}")
+        wandb.log({"percentage_negative_logits": torch.sum(output < 0).item() / output.numel()})
+        # log the histogram of the logits
+        wandb.log({"logits_histogram": wandb.Histogram(output.flatten().detach().cpu().numpy())})
+
         agent_action = action[:, -1]
         # loss = criterion(agent_output, agent_action) \
+        agent_output.reshape(agent_output.shape[0], -1)
         loss = criterion(agent_output, state) \
             + vq_loss
         accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
@@ -183,6 +198,8 @@ def train(model, dataloader, num_actions=2):
         batch_loss.append(loss.item())
         batch_vq_loss.append(vq_loss.item())
         batch_accuracy.append(accuracy)
+
+        wandb.log({"batch_loss": loss.item(), "batch_accuracy": accuracy, "batch_vq_loss": vq_loss.item()})
         
     return np.mean(batch_loss), np.mean(batch_accuracy), np.mean(batch_vq_loss)
 
@@ -275,8 +292,8 @@ if __name__ == "__main__":
     print("All data hashes are in the output folder")
 
     sequence_lengths = [2]
-    w_d = [(128,2)]
-    num_epochs = 50
+    w_d = [(256,2)]
+    num_epochs = 20
 
     df = pd.DataFrame(columns=[
     "data_hash", 
