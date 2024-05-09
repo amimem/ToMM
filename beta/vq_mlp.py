@@ -159,24 +159,24 @@ class CustomDataset(Dataset):
     
 def train(model, dataloader, num_actions=2):
     model.train()
-    # criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss()
     # criterion = nn.MSELoss()
-    sequence_length = dataloader.dataset.sequence_length
-    pos_weight = torch.ones([num_actions * sequence_length]) * 10  # replace 'n' with the weight you want to use
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    # sequence_length = dataloader.dataset.sequence_length
+    # pos_weight = torch.ones([num_actions * sequence_length]) * 10  # replace 'n' with the weight you want to use
+    # criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
 
     batch_loss = []
     batch_vq_loss = []
     batch_accuracy = []
-    for i, (_, action) in enumerate(dataloader):
+    for i, (state, action) in enumerate(dataloader):
         optimizer.zero_grad()
         # bsz, seqlen, statedim = state.shape
         # bsz, seqlen = action.shape
         # state = state.flatten(start_dim=1)
         action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1) # (batch_size, sequence_length * num_actions)
         action_onehot[:, -num_actions:] = 0 # set the last num_actions to 0, the network should predict the last action
-        state = torch.hstack([action_onehot.float()]) 
+        state = torch.hstack([state, action_onehot.float()]) 
 
         output, vq_loss = model(state)
         agent_output = output
@@ -205,20 +205,20 @@ def train(model, dataloader, num_actions=2):
 
 def test(model, dataloader, num_actions=2):
     model.eval()
-    # criterion = nn.CrossEntropyLoss()
-    sequence_length = dataloader.dataset.sequence_length
-    pos_weight = torch.ones([num_actions * sequence_length]) * 10  # replace 'n' with the weight you want to use
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    criterion = nn.CrossEntropyLoss()
+    # sequence_length = dataloader.dataset.sequence_length
+    # pos_weight = torch.ones([num_actions * sequence_length]) * 10  # replace 'n' with the weight you want to use
+    # criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     batch_loss = []
     batch_vq_loss = []
     batch_accuracy = []
-    for i, (_, action) in enumerate(dataloader):
+    for i, (state, action) in enumerate(dataloader):
         # bsz, seqlen, statedim = state.shape
         # bsz, seqlen = action.shape
         # state = state.flatten(start_dim=1)
         action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
         action_onehot[:, -num_actions:] = 0
-        state = torch.hstack([action_onehot.float()])
+        state = torch.hstack([state, action_onehot.float()])
 
         output, vq_loss = model(state)
         agent_output = output
