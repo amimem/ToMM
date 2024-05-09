@@ -173,7 +173,7 @@ def train(model, dataloader, num_actions=2):
         optimizer.zero_grad()
         # bsz, seqlen, statedim = state.shape
         # bsz, seqlen = action.shape
-        # state = state.flatten(start_dim=1)
+        state = state.flatten(start_dim=1)
         action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1) # (batch_size, sequence_length * num_actions)
         action_onehot[:, -num_actions:] = 0 # set the last num_actions to 0, the network should predict the last action
         state = torch.hstack([state, action_onehot.float()]) 
@@ -215,7 +215,7 @@ def test(model, dataloader, num_actions=2):
     for i, (state, action) in enumerate(dataloader):
         # bsz, seqlen, statedim = state.shape
         # bsz, seqlen = action.shape
-        # state = state.flatten(start_dim=1)
+        state = state.flatten(start_dim=1)
         action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
         action_onehot[:, -num_actions:] = 0
         state = torch.hstack([state, action_onehot.float()])
