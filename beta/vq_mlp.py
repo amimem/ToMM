@@ -206,24 +206,26 @@ def train(model, dataloader, num_actions=2):
 def test(model, dataloader, num_actions=2):
     model.eval()
     # criterion = nn.CrossEntropyLoss()
-    criterion = nn.MSELoss()
+    sequence_length = dataloader.dataset.sequence_length
+    pos_weight = torch.ones([num_actions * sequence_length]) * 10  # replace 'n' with the weight you want to use
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     batch_loss = []
     batch_vq_loss = []
     batch_accuracy = []
-    for i, (state, action) in enumerate(dataloader):
+    for i, (_, action) in enumerate(dataloader):
         # bsz, seqlen, statedim = state.shape
         # bsz, seqlen = action.shape
-        state = state.flatten(start_dim=1)
+        # state = state.flatten(start_dim=1)
         action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
         action_onehot[:, -num_actions:] = 0
-        state = torch.hstack([state, action_onehot.float()])
+        state = torch.hstack([action_onehot.float()])
 
         output, vq_loss = model(state)
         agent_output = output
         agent_action = action[:, -1]
         # loss = criterion(agent_output, agent_action) \
         loss = criterion(agent_output, state) \
-            # + vq_loss
+            + vq_loss
         accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
         batch_loss.append(loss.item())
         batch_vq_loss.append(vq_loss.item())
@@ -330,15 +332,15 @@ if __name__ == "__main__":
                     # train the model
                     train_epoch_loss, train_epoch_accuracy, train_epoch_vq_loss = train(mlp, train_dataloader, num_actions=num_actions)
                     # test the model
-                    # test_epoch_loss, test_epoch_accuracy, test_epoch_vq_loss = test(mlp, test_dataloader, num_actions=num_actions)
+                    test_epoch_loss, test_epoch_accuracy, test_epoch_vq_loss = test(mlp, test_dataloader, num_actions=num_actions)
                     # print both the train and test epoch loss and accuracy and vq_loss
                     print(f"Epoch: {epoch}, Train Loss: {train_epoch_loss}, Train Accuracy: {train_epoch_accuracy}, Train VQ Loss: {train_epoch_vq_loss}")
-                    # print(f"Epoch: {epoch}, Test Loss: {test_epoch_loss}, Test Accuracy: {test_epoch_accuracy}, Test VQ Loss: {test_epoch_vq_loss}")
+                    print(f"Epoch: {epoch}, Test Loss: {test_epoch_loss}, Test Accuracy: {test_epoch_accuracy}, Test VQ Loss: {test_epoch_vq_loss}")
 
                     wandb.log({"epoch": epoch, "train_loss": train_epoch_loss, "train_accuracy": train_epoch_accuracy, \
-                                # "test_loss": test_epoch_loss, "test_accuracy": test_epoch_accuracy, \
-                                    "train_vq_loss": train_epoch_vq_loss})
-                                        # "test_vq_loss": test_epoch_vq_loss})
+                                "test_loss": test_epoch_loss, "test_accuracy": test_epoch_accuracy, \
+                                    "train_vq_loss": train_epoch_vq_loss,
+                                        "test_vq_loss": test_epoch_vq_loss})
                     # Append the data to the DataFrame
                     new_row = pd.DataFrame({
                         "data_hash": [data_hash],
