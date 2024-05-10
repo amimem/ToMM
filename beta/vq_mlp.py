@@ -115,19 +115,21 @@ class MLP(nn.Module):
         self.vq = VectorQuantizer(num_embeddings=num_embeddings, embedding_dim=embedding_dim, commitment_cost=commitment_cost)
         self.hidden_project_out = nn.Linear(self.z, hidden_size)
         self.hidde_layer_2 = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(half_num_hidden_layers)])
-        self.layer_norm = nn.LayerNorm(hidden_size)
         self.output_layer = nn.Linear(hidden_size, output_size)
         self.activation = nn.ReLU()
+        self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, x):
         x = self.activation(self.input_layer(x))
         for layer in self.hidden_layer_1:
-            x = self.activation(layer(x))
+            x = self.layer_norm(layer(x))
+            x = self.activation(x)
         x = self.activation(self.hidden_project_in(x))
         x, vq_loss = self.vq(x)
         x = self.activation(self.hidden_project_out(x))
         for layer in self.hidde_layer_2:
-            x = self.activation(layer(x))
+            x = self.layer_norm(layer(x))
+            x = self.activation(x)
         x = self.layer_norm(x)
         x = self.output_layer(x)
         return x, vq_loss
