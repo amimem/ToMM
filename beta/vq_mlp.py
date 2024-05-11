@@ -73,6 +73,9 @@ except:
 
 seed = 0
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Running on {device}")
+
 # sets the seed for generating random numbers
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -193,10 +196,13 @@ def train(model, dataloader, num_actions=2):
         optimizer.zero_grad()
         # bsz, seqlen, statedim = state.shape
         # bsz, seqlen = action.shape
-        state = state.flatten(start_dim=1)
-        action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1) # (batch_size, sequence_length * num_actions)
+
+        state = state.flatten(start_dim=1).to(device)
+        action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1).to(device) # (batch_size, sequence_length * num_actions)
         action_onehot[:, -num_actions:] = 0 # set the last num_actions to 0, the network should predict the last action
-        state = torch.hstack([state, action_onehot.float()]) 
+
+        state = torch.hstack([state, action_onehot.float()]).to(device)
+        action = action.to(device)
 
         output, vq_loss = model(state)
 
@@ -233,6 +239,9 @@ def test(model, dataloader, num_actions=2):
         action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
         action_onehot[:, -num_actions:] = 0
         state = torch.hstack([state, action_onehot.float()])
+
+        state = state.to(device)
+        action = action.to(device)
 
         output, vq_loss = model(state)
         agent_action = action[:, -1]
@@ -280,7 +289,8 @@ def get_model(dataloader, num_actions: int, hidden_size=64, num_groups=2, num_hi
     # z = int(hidden_size**2 // (2*hidden_size + num_embeddings))
     z = hidden_size
 
-    mlp = MLP(input_size, hidden_size, num_actions, num_embeddings, vq_embedding_dim, z, num_hidden_layers)      
+    
+    mlp = MLP(input_size, hidden_size, num_actions, num_embeddings, vq_embedding_dim, z, num_hidden_layers).to(device)
 
     return mlp
 
@@ -311,9 +321,9 @@ if __name__ == "__main__":
     print("All data hashes are in the output folder")
 
     sequence_lengths = [8]
-    w_d = [(256,2)]
+    w_d = [(512,2)]
     vq_embedding_dim = 4
-    num_epochs = 10
+    num_epochs = 30
 
     df = pd.DataFrame(columns=[
         "data_hash", "num_agents", "num_groups", "state_dim", "vq_projection_dim", "num_actions", "sequence_length",
