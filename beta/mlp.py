@@ -176,14 +176,15 @@ if __name__ == "__main__":
     set_seed(seed)
 
     # for n_agents and n_groups = n_agents
-    data_hashes = ["data_6013b64ce8", "data_dfdaecc3ee", "data_8646a4bdd8", "data_e94dbedcea",\
-                    "data_813427ec72", "data_fbe4154fff", "data_d4fcf6cdef", "data_8950a6aae5",\
-                    "data_97b6c3ab33", "data_d8fd9e8472", "data_fcb20c7d4a", "data_e8cbc57b61",\
-                    "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"] + \
-                   ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
-                    "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
-                    "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
-                    "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
+    data_hashes = ["data_6013b64ce8"]
+                    # "data_dfdaecc3ee", "data_8646a4bdd8", "data_e94dbedcea",\
+                #     "data_813427ec72", "data_fbe4154fff", "data_d4fcf6cdef", "data_8950a6aae5",\
+                #     "data_97b6c3ab33", "data_d8fd9e8472", "data_fcb20c7d4a", "data_e8cbc57b61",\
+                #     "data_f714057b40", "data_567898bdec", "data_f2b68367cd", "data_d4588ac462"] + \
+                #    ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
+                #     "data_4af6f9d879", "data_a71679fd65", "data_46ef7fc2a7", "data_935be5ac8f",\
+                #     "data_eb9b7315c6", "data_0b7d25ce95", "data_89a277ffd9", "data_cf84771ef1",\
+                #     "data_76a571ea15", "data_dbf79f7d01", "data_5f734fb2a1", "data_6644bb7ada"]
     
     
     # data_hashes = ["data_6013b64ce8", "data_27dea4bcce", "data_41f896f2be", "data_9bd5f5ee5f",\
@@ -196,7 +197,7 @@ if __name__ == "__main__":
     print("All data hashes are in the output folder")
 
     sequence_lengths = [8]
-    w_d = [(128, 2)]
+    w_d = [(256, 2)]
     num_epochs = 20
 
     df = pd.DataFrame(columns=[

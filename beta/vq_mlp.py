@@ -17,12 +17,17 @@ class VectorQuantizer(nn.Module):
         self.commitment_cost = commitment_cost
         self.num_embeddings = num_embeddings
         self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+        self.num_codes = None
         self.reset_parameters()
 
     def forward(self, latents):
         # latent shape: (batch_size, z)
         # reshape latents to (batch_size, -1, D_e)
         latents = latents.reshape(latents.shape[0], -1, self.embedding.weight.shape[-1])
+        self.num_codes = latents.shape[1]
+
+        # log the l2 norm of the latents
+        wandb.log({"l2_norm_latents": torch.linalg.norm(latents, ord=2, dim=-1).mean().item()})
         # embedding shape: (N_e, D_e)
         # Compute L2 distances between latents and embedding weights
         weights = self.embedding.weight # weights shape: (N_e, D_e)
@@ -30,6 +35,9 @@ class VectorQuantizer(nn.Module):
         dist = torch.linalg.vector_norm(sub, dim=-1) # dist shape: (batch_size, z//D_e, N_e)
         encoding_inds = torch.argmin(dist, dim=-1)        # Get the number of the nearest codebook vector, shape: (batch_size, z//D_e)
         quantized_latents = self.quantize(encoding_inds)  # Quantize the latents of shape (batch_size, z//D_e, D_e)
+
+        # log the l2 norm of the quantized latents
+        wandb.log({"l2_norm_quantized_latents": torch.linalg.norm(quantized_latents, ord=2, dim=-1).mean().item()})
 
         # Compute the VQ Losses
         codebook_loss = F.mse_loss(latents.detach(), quantized_latents)
@@ -45,7 +53,7 @@ class VectorQuantizer(nn.Module):
         quantized_latents = latents + (quantized_latents - latents).detach()
         # reshape quantized_latents to (batch_size, -1) where -1 = z
         quantized_latents = quantized_latents.reshape(quantized_latents.shape[0], quantized_latents.shape[-1]*quantized_latents.shape[-2])
-        return quantized_latents ,vq_loss
+        return quantized_latents, vq_loss
     
     def quantize(self, encoding_indices):
         z = self.embedding(encoding_indices) # z shape: (batch_size, z//D_e)
@@ -97,6 +105,7 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
 
         self.z = vq_projection_dim
+        self.num_embeddings = num_embeddings
 
         # assert that z is divisble by embedding_dim, if not, increase z
         if self.z % embedding_dim != 0:
@@ -121,17 +130,28 @@ class MLP(nn.Module):
 
     def forward(self, x):
         x = self.activation(self.input_layer(x))
+
         for layer in self.hidden_layer_1:
-            x = self.layer_norm(layer(x))
+            x = layer(x)
+            # x = self.layer_norm(x)
             x = self.activation(x)
-        x = self.activation(self.hidden_project_in(x))
+
+        x = self.hidden_project_in(x)
+        x = self.activation(x)
+
         x, vq_loss = self.vq(x)
-        x = self.activation(self.hidden_project_out(x))
+
+        x = self.hidden_project_out(x)
+        x = self.activation(x)
+
         for layer in self.hidde_layer_2:
-            x = self.layer_norm(layer(x))
+            x = layer(x)
+            # x = self.layer_norm(x))
             x = self.activation(x)
-        x = self.layer_norm(x)
+
+        # x = self.layer_norm(x)
         x = self.output_layer(x)
+
         return x, vq_loss
 
 # create a Dataset object
@@ -253,10 +273,12 @@ def get_model(dataloader, num_actions: int, hidden_size=64, num_groups=2, num_hi
 
     # find the closest power 2 to the number of groups (upper bound)
     # num_embeddings = 2**np.ceil(np.log2(num_groups) + 1)
-    num_embeddings = hidden_size
+    num_embeddings = int(hidden_size)
+    print(f"Number of embeddings: {num_embeddings}")
 
     # solve z for the equation: 2*hidden_size*z + num_embeddings*z = hidden_size**2
-    z = int(hidden_size**2 // (2*hidden_size + num_embeddings))
+    # z = int(hidden_size**2 // (2*hidden_size + num_embeddings))
+    z = hidden_size
 
     mlp = MLP(input_size, hidden_size, num_actions, num_embeddings, vq_embedding_dim, z, num_hidden_layers)      
 
@@ -288,10 +310,10 @@ if __name__ == "__main__":
     assert all([os.path.exists(f"output/{data_hash}") for data_hash in data_hashes])
     print("All data hashes are in the output folder")
 
-    sequence_lengths = [2]
+    sequence_lengths = [8]
     w_d = [(256,2)]
-    vq_embedding_dim = 16
-    num_epochs = 20
+    vq_embedding_dim = 4
+    num_epochs = 10
 
     df = pd.DataFrame(columns=[
         "data_hash", "num_agents", "num_groups", "state_dim", "vq_projection_dim", "num_actions", "sequence_length",
@@ -312,10 +334,15 @@ if __name__ == "__main__":
                 train_dataloader, test_dataloader = get_data_loader(data, sequence_length)
                 mlp = get_model(train_dataloader, num_actions, hidden_size, num_groups, num_hidden_layers=num_hidden_layers, vq_embedding_dim=vq_embedding_dim)
                 vq_projection_dim = mlp.z
+                num_embeddings = mlp.num_embeddings
+                num_codes = mlp.vq.num_codes if mlp.vq.num_codes is not None else mlp.z//vq_embedding_dim
+
+                wandb_run_name = f"sl_{sequence_length}_wd_{w_d}_z_{vq_projection_dim}_edim_{vq_embedding_dim}_ne_{num_embeddings}_nc_{num_codes}"
+                print(f"Running {wandb_run_name}")
 
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers,
                                 "vq_embedding_dim": vq_embedding_dim, "vq_projection_dim": vq_projection_dim, "num_actions": num_actions})
-                wandb.init(project="MLP", group="May_10th_vq_test", job_type=None, config=config)
+                wandb.init(project="MLP", group="May_10th_vq_test", job_type=None, config=config, name=wandb_run_name)
 
                 for epoch in range(num_epochs):
                     # train the model
