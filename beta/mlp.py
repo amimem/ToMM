@@ -65,16 +65,21 @@ class MLP(nn.Module):
 
 # create a Dataset object
 class CustomDataset(Dataset):
-    def __init__(self, states, actions, sequence_length, seed=0, train=True):
+    def __init__(self, states, actions, sequence_length, num_actions, seed=0, train=True):
         # get a rng
         self.rng = np.random.RandomState(seed)
         self.train = train
         self.states = [torch.tensor(states[i:i+sequence_length]).float() for i in range(len(states) - sequence_length + 1)]
+        self.states = torch.stack(self.states) # shape: num_seqs, sequence_length, dim_state
         self.actions = [torch.tensor(actions[i:i+sequence_length]).long() for i in range(len(actions) - sequence_length + 1)]
+        self.actions = torch.stack(self.actions) # shape: num_seqs, sequence_length, num_agents
         self.sequence_length = sequence_length
+        self.num_actions = num_actions
+        self.state_dim = states.shape[1]
         self.num_agents = actions.shape[1]
         self.train_agents = self.rng.randint(0, self.num_agents, size=len(self.states))
         self.validation_agents = self.rng.randint(0, self.num_agents, size=len(self.states))
+        self.input_shape = self.sequence_length * (self.state_dim + self.num_actions)
         for i, (t,v) in enumerate(zip(self.train_agents, self.validation_agents)):
             if t == v:
                 self.validation_agents[i] = (v + 1) % self.num_agents
@@ -88,7 +93,17 @@ class CustomDataset(Dataset):
             split = self.train_agents
         else:
             split = self.validation_agents
-        return self.states[idx], self.actions[idx][:, split[idx]]
+
+        states = self.states[idx] # seqlen, statedim
+        actions = self.actions[idx][:, split[idx]] # seqlen, 1
+
+        states = states.flatten(start_dim=0) # seqlen*statedim
+        action_onehot = torch.nn.functional.one_hot(actions, num_classes=self.num_actions).flatten(start_dim=0) #seqlen*num_actions
+        action_onehot[-self.num_actions:] = 0
+        input = torch.hstack([states, action_onehot.float()]) #seqlen*(statedim+num_actions)
+        target = actions[-1] # 1
+
+        return input, target
     
 def train(model, dataloader, num_actions=2):
     model.train()
@@ -97,20 +112,13 @@ def train(model, dataloader, num_actions=2):
 
     batch_loss = []
     batch_accuracy = []
-    for i, (state, action) in enumerate(dataloader):
+    for i, (inputs, targets) in enumerate(dataloader):
+        # inputs: bsz, seqlen*(statedim+num_actions)
+        # targets: bsz, 1
+        outputs = model(inputs)
         optimizer.zero_grad()
-        # bsz, seqlen, statedim = state.shape
-        # bsz, seqlen = action.shape
-        state = state.flatten(start_dim=1)
-        action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
-        action_onehot[:, -num_actions:] = 0
-        state = torch.hstack([state, action_onehot.float()])
-
-        output = model(state)
-        agent_output = output
-        agent_action = action[:, -1]
-        loss = criterion(agent_output, agent_action)
-        accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
+        loss = criterion(outputs, targets)
+        accuracy = (torch.argmax(outputs, dim=1) == targets).float().mean().item()
         loss.backward()
         optimizer.step()
         batch_loss.append(loss.item())
@@ -123,47 +131,35 @@ def test(model, dataloader, num_actions=2):
     criterion = nn.CrossEntropyLoss()
     batch_loss = []
     batch_accuracy = []
-    for i, (state, action) in enumerate(dataloader):
-        # bsz, seqlen, statedim = state.shape
-        # bsz, seqlen = action.shape
-        state = state.flatten(start_dim=1)
-        action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
-        action_onehot[:, -num_actions:] = 0
-        state = torch.hstack([state, action_onehot.float()])
+    for i, (inputs, targets) in enumerate(dataloader):
 
-        output = model(state)
-        agent_output = output
-        agent_action = action[:, -1]
-        loss = criterion(agent_output, agent_action)
-        accuracy = (torch.argmax(agent_output, dim=1) == agent_action).float().mean().item()
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        accuracy = (torch.argmax(outputs, dim=1) == targets).float().mean().item()
         batch_loss.append(loss.item())
         batch_accuracy.append(accuracy)
         
     return np.mean(batch_loss), np.mean(batch_accuracy)
 
 
-def get_data_loader(data, sequence_length):
+def get_data_loader(data, sequence_length, num_actions):
     states = data["states"]
     actions = data["actions"]
     # shape of states: (num_states, dim_teacher_inp)
     # shape of actions: (num_states, num_teachers)
     print(states.shape, actions.shape)
 
-    train_dataset = CustomDataset(states, actions, sequence_length, seed=seed, train=True)
-    test_dataset = CustomDataset(states, actions, sequence_length, seed=seed, train=False)
+    train_dataset = CustomDataset(states, actions, sequence_length, num_actions, seed=seed, train=True)
+    test_dataset = CustomDataset(states, actions, sequence_length, num_actions, seed=seed, train=False)
     train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
     return train_dataloader, test_dataloader
 
-def get_model(dataloader, num_actions, hidden_size=64, num_hidden_layers=2, num_epochs=10):
-
-    state, action = next(iter(dataloader))
-    state = state.flatten(start_dim=1)
-    action_onehot = torch.nn.functional.one_hot(action, num_classes=num_actions).flatten(start_dim=1)
-    state = torch.hstack([state, action_onehot.float()])
+def get_model(dataloader, hidden_size=64, num_hidden_layers=2, num_epochs=10):
 
     # Create an instance of the MLP
-    input_size = state.shape[1]
+    input_size = dataloader.dataset.input_shape
+    num_actions = dataloader.dataset.num_actions
     hidden_size = hidden_size
     num_hidden_layers = num_hidden_layers
     num_epochs = num_epochs
@@ -227,8 +223,8 @@ if __name__ == "__main__":
                 num_actions = config["file_attrs"]["num_actions"]
                 config.update({"sequence_length": sequence_length, "hidden_size": hidden_size, "num_hidden_layers": num_hidden_layers})
                 wandb.init(project="MLP", group="May_7th_no_vq", job_type=None, config=config)
-                train_dataloader, test_dataloader = get_data_loader(data, sequence_length)
-                mlp = get_model(train_dataloader, num_actions, hidden_size, num_hidden_layers)
+                train_dataloader, test_dataloader = get_data_loader(data, sequence_length, num_actions)
+                mlp = get_model(train_dataloader, hidden_size, num_hidden_layers)
 
                 for epoch in range(num_epochs):
                     # train the model
