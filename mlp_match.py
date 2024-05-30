@@ -9,7 +9,7 @@ import os
 from types import SimpleNamespace
 
 # import custom functions
-from models import Model
+from models import Model, MLP_baseline
 from data_utils import load_data, get_seqdata_loaders
 
 # get slurm job array index
@@ -95,13 +95,17 @@ def train(data_hash, config):
     # print(f"Running context length {seq_lens}")
     # if job_id != -1:
     #     data_hashes = [data_hashes[job_id]]
-
-    model = Model(config)
+    if config.model_name=='STOMP':
+        model = STOMP(config)
+    elif config.model_name=='MLP':
+        model = MLP_baseline(config)
+    elif config.model_name =='sharedMLP':
+        model = sharedMLP_baseline(config)
 
     # log number of parameters
     num_parameters = model.count_parameters()
     print(f"number of parameters: {num_parameters}", flush=True)
-    # print("gap between P and num_parameters: ", config.P - num_parameters, flush=True)
+    print("gap between P and num_parameters: ", config.P - num_parameters, flush=True)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
@@ -189,7 +193,6 @@ if __name__ == "__main__":
     # model and training configuration
     config = {
         'M_model': M,
-        'enc_out_dim': 10,
         'seq_len': 16,
         'P': P,
         'num_epochs': epochs,
@@ -197,14 +200,30 @@ if __name__ == "__main__":
         'batch_size': 8,
         'train2test_ratio': 0.8
         }
-    # set architecture type:
-    # --single-agent baseline
-    config['cross_talk'] = False
-    config['decoder_type'] = 'MLP'
-    # --multi-agent baseline
-    config['cross_talk'] = True
-    config['decoder_type'] = 'BuffAtt'
 
+    # set architecture type:
+    # >STOMP
+    if False:
+        config['model_name'] = 'STOMP'
+        # config['enc_MLPhidden_dim'] = 256
+        # config['enc_hidden_dim'] = 256
+        # config['enc_out_dim'] = 256
+        if True: # --single-agent baseline
+            config['cross_talk'] = False
+            config['decoder_type'] = 'MLP'
+        else: # --multi-agent baseline
+            config['cross_talk'] = True
+            config['decoder_type'] = 'BuffAtt'
+            # config['dec_hidden_dim'] = 256
+    else:
+        # >illustrative baselines
+        # config['enc_out_dim'] = 256
+        if True: # unshared
+            config['model_name'] = 'MLP'
+        else: # shared
+            config['model_name'] = 'sharedMLP'
+        config['cross_talk'] = None
+        config['decoder_type'] = None
 
     store_name = train(data_hash, config)
 
