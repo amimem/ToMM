@@ -10,8 +10,7 @@ import hashlib
 import time
 from utils import numpy_scalar_to_python
 
-def load_data(data_hash, data_seed=0):
-    data_dir = f"output/{data_hash}"
+def load_data(data_dir, data_seed=0):
     data_filename = f"{data_dir}/data.h5"
     config_filename = f"{data_dir}/config.yaml"
     # load the hdf data
@@ -37,21 +36,20 @@ class CustomSeqDataset(Dataset):
             torch.tensor(states[i:i+seq_len]).float()
             for i in range(len(states) - seq_len)
         ]
-        self.states = torch.stack(self.states)  # num_seqs, seq_len, state_dim
+        self.states = torch.stack(self.states)  
+        # num_seqs, seq_len, state_dim
         self.actions = [
             torch.tensor(actions[i:i+seq_len]).long()
             for i in range(len(actions) - seq_len)
         ]
-        print(f'made {len(self.states)} contexts')
-        # num_seqs, seq_len, num_agents
         self.actions = torch.stack(self.actions)
+        # num_seqs, seq_len, num_agents
+        print(f'made {len(self.states)} contexts')
 
         self.seq_len = seq_len
         self.num_actions = num_actions
         self.state_dim = states.shape[1]
         self.num_agents = actions.shape[1]
-        self.context_size = self.seq_len * \
-            (self.state_dim + self.num_actions) + self.state_dim
 
     def __len__(self):
         return len(self.states)
@@ -92,25 +90,13 @@ def get_seqdata_loaders(data, seq_len, num_actions=2, train2test_ratio=0.8, batc
     return train_dataloader, test_dataloader
 
 
-def generate_dataset_from_logitmodel(config, state_dict_file=None):
-
-    # if state_dict_name not None:
-    #     model.load(state_dict(torch.load(state_dict_name)))
+def generate_dataset_from_logitmodel(config):
 
     datasets = {}
     seed_list = range(2)
     for ix, seed in enumerate(seed_list):
         print(f"running seed {seed} of {len(seed_list)}")
         rng = np.random.default_rng(seed=seed)
-
-        # if config.model_name=='STOMP':
-        #     model = STOMP(config)
-        # elif config.model_name=='MLPperagent':
-        #     model = MLPperagent(config)
-        # elif config.model_name =='sharedMLP':
-        #     model = sharedMLP(config)
-        # elif config.model_name =='MLPallagents':
-        #     model = MLPallagents(config)
 
         states=sample_states(config['num_samples'],config['state_dim'],rng)
         model=logit(SimpleNamespace(**config),rng)
@@ -139,12 +125,12 @@ def sample_states(num_samples,state_dim,rng):
 
 def save_dataset_from_model(config, datasets):
 
-    output_path = os.path.join(os.getcwd(), config['output'])
+    output_path = os.path.join(os.getcwd(), config['outdir'])
     os.makedirs(output_path, exist_ok=True)
 
     # take all args except output path
     hash_dict = config.copy()
-    hash_dict.pop('output')
+    hash_dict.pop('outdir')
 
     # make dash_dict an ordered dict
     hash_dict = dict(sorted(hash_dict.items()))

@@ -5,7 +5,9 @@ import torch.optim as optim
 import torch
 import wandb
 import time
+import hashlib
 import os
+import yaml
 from types import SimpleNamespace
 
 # import custom functions
@@ -41,10 +43,10 @@ def eval_perf(model, dataloader, and_train=False, optimizer=None):
 
     batch_loss = []
     batch_accuracy = []
-    for i, (state_seq, action_seqs, target_actions) in enumerate(dataloader):
-        # agent_contexts: (bsz, num_agents, context_size), context_size = seq_len*(state_space_dim+num_actions)
-        # targets: (bsz, num_agents)
-        print(i)
+    for batch_step, (state_seq, action_seqs, target_actions) in enumerate(dataloader):
+        # state_seq: (batch_size, seq_len, state_dim)
+        # action_seqs: (batch_size, seq_len, num_agents, num_actions)
+        # target actions: (bsz, num_agents)
         action_logit_vectors = model(state_seq, action_seqs)
 
         if hasattr(model, "decoder_type"):
@@ -75,11 +77,33 @@ def eval_perf(model, dataloader, and_train=False, optimizer=None):
 
 
 def train(config):
-    data, data_config = load_data(config['data_hash'],data_seed=config['data_seed'])
+
+    data_dir = config['outdir'] + config['data_dir']
+    data, data_config = load_data(data_dir,data_seed=config['data_seed'])
     data_config = SimpleNamespace(**data_config['file_attrs'])
     model_config = SimpleNamespace(**config['model_config'])
     config = SimpleNamespace(**config)
-    # config.data_config = vars(data_config)
+
+    # make a directory for saving the results
+    save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # hash the arguments except for the outdir
+    hash_dict = vars(config).copy()
+    hash_dict.pop('outdir')
+
+    # make a subdirectory for each run
+    hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
+    train_info_dir = os.path.join(save_dir, hash_var)
+    if not os.path.exists(train_info_dir):
+        os.makedirs(train_info_dir)
+
+    # initialize wandb
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    wandb_run_name = str(hash_var) + "_" + str(timestamp)
+    print("wandb run name: " + wandb_run_name, flush=True)
+
 
     train_dataloader, test_dataloader = get_seqdata_loaders(
         data,
@@ -88,15 +112,11 @@ def train(config):
         train2test_ratio=config.train2test_ratio,
         batch_size=config.batch_size,
     )
-    model_config.context_size = train_dataloader.dataset.context_size
     model_config.num_actions = train_dataloader.dataset.num_actions
     model_config.num_agents = train_dataloader.dataset.num_agents
     model_config.state_dim = train_dataloader.dataset.state_dim
     model_config.P = config.P
-    # seq_lens = [seq_lens[job_id]]
-    # print(f"Running context length {seq_lens}")
-    # if job_id != -1:
-    #     data_hashes = [data_hashes[job_id]]
+ 
     if model_config.model_name=='STOMP':
         model = STOMP(model_config)
     elif model_config.model_name=='MLPperagent':
@@ -112,6 +132,9 @@ def train(config):
     print("gap between P and num_parameters: ", config.P - num_parameters, flush=True)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    print(f"seed {config.seed} training of {model_config.model_name} model " +\
+        f"with modelsize {model_config.P} for {config.num_epochs} epochs " +\
+        f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
 
     # wandb.init(project="TOGM", group="archcompare",job_type=None, config=vars(config))
     for epoch in range(config.num_epochs):
@@ -137,9 +160,8 @@ def train(config):
 
         # Append the data to the DataFrame
         new_row = pd.DataFrame({
-            "data_hash": [data_hash],
+            "data_hash": [config.data_dir],
             "num_agents": [model_config.num_agents],
-            # "num_groups": [data_config.M],
             "state_dim": [model_config.state_dim],
             "num_actions": [model_config.num_actions],
             "decoder_type": [model_config.decoder_type],
@@ -148,18 +170,33 @@ def train(config):
             "train_loss": [train_epoch_loss],
             "train_accuracy": [train_epoch_accuracy],
             "test_loss": [test_epoch_loss],
-            "test_accuracy": [test_epoch_accuracy]
+            "test_accuracy": [test_epoch_accuracy],
+            "data_seed": [config.data_seed]
         }, index=[0])
         df = pd.concat([df, new_row], ignore_index=True) if epoch>0 else new_row
     # wandb.finish()
 
-    time_str = time.strftime("%Y-%m-%d-%H-%M")
-    data_dir = f"output/{data_hash}"
-    data_filename = f"{data_dir}"
-    store_name = f"{data_filename}/{time_str}_results.csv"
-    df.to_csv(store_name, index=False)
+    training_run_info = \
+        f"_{model_config.model_name}"+\
+        f"_modelsize_{model_config.P}"+\
+        f"_trainseed_{config.seed}"+\
+        f"_epochs_{config.num_epochs}"+\
+        f"_batchsize_{config.batch_size}"+\
+        f"_lr_{config.learning_rate}"
+    print("saving " + training_run_info + " at hash:", flush=True)
+    print(hash_var, flush=True)
 
-    return store_name
+    # also save config as yaml
+    with open(train_info_dir + "/model_config.yaml", 'w') as file:
+        yaml.dump(model_config, file)
+
+    torch.save(model.state_dict(), train_info_dir + "/state_dict_final.pt")
+
+    # time_str = time.strftime("%Y-%m-%d-%H-%M")
+    data_filename = f"{data_dir}"
+    df.to_csv(train_info_dir + "results.csv", index=False)
+
+    return train_info_dir
 
 
 if __name__ == "__main__":
@@ -175,15 +212,14 @@ if __name__ == "__main__":
     #generate correlation-controlled (s,a)-tuple data
     dataset_config = {
         "num_samples": int(1e4),
-        "output" : "output",
+        "outdir" : "output/",
         "num_actions":2,
         "num_agents": N,
         "state_dim": K,
         "model_name":"logit",
         "corr": corr
     }
-    data_hash=generate_dataset_from_logitmodel(dataset_config)
-    # hash
+    data_dir=generate_dataset_from_logitmodel(dataset_config)
 
     #----------------------------------
 
@@ -191,7 +227,7 @@ if __name__ == "__main__":
     model_config = {'seq_len': 16}
     # set architecture type:
     # >STOMP
-    if False:
+    if True:
         model_config['model_name'] = 'STOMP'
         # config['enc_MLPhidden_dim'] = 256
         # config['enc_hidden_dim'] = 256
@@ -218,13 +254,15 @@ if __name__ == "__main__":
     #set training parameters
     config = {
         'P': P,
-        'num_epochs': 10,
+        'num_epochs': 1,
         'learning_rate': 5e-5,
         'batch_size': 8,
         'train2test_ratio': 0.8,
-        'data_hash': data_hash,
+        'data_dir': data_dir,
         'data_seed': 0,
-        'model_config': model_config
+        'model_config': model_config,
+        'outdir': 'output/',
+        'seed': seed
         }
 
     store_name = train(config)
