@@ -165,10 +165,15 @@ def get_width(v):
         #     b = v.M_model*(v.state_dim)
         #     c = v.num_agents*v.M_model-v.P
         #     W = solve_quadratic(a, b, c)
-    elif v.model_name == 'MLP':
+    elif v.model_name == 'MLPperagent':
         a = n_layers
         b = v.state_dim+v.num_actions
         c = -v.P/v.num_agents
+        W = solve_quadratic(a, b, c)
+    elif v.model_name == 'MLPallagents':
+        a = n_layers
+        b = v.state_dim+v.num_actions*v.num_agents
+        c = -v.P
         W = solve_quadratic(a, b, c)
     elif v.model_name == 'sharedMLP':
         a = n_layers
@@ -177,10 +182,36 @@ def get_width(v):
         W = solve_quadratic(a, b, c)
     else:
         print('choose valid model name')
-    if W<2:
-        W=2
+    minimum_capacity = 2
+    if W<minimum_capacity:
+        W=minimum_capacity
     return W
+#------------------data generation models
 
+class logit(nn.Module):
+    def __init__(self, config,rng):
+        super().__init__()
+
+        assert config.num_actions ==2, "implemented for num_action = 2"
+        mean = np.zeros(config.num_agents)
+        cov = config.corr*np.ones((config.num_agents,config.num_agents))+\
+                (1-config.corr)*np.eye(config.num_agents)
+        num_obs = 2**config.state_dim
+        action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
+        # introduce label disorder for this action
+        self.action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
+        # (Assuming action selection based on sign of logit)
+        # action 0 logit is same as action at corr=1 logit if action at corr=1 is 0, else it is the negative of action logit at corr=1
+        self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
+        self.mask = config.num_actions**np.arange(config.state_dim)
+
+    def forward(self, state):
+        obs=(state>0) # batch_size, state_dim
+        action_0_logits = self.action_0_logits[self.obs2index(obs)]
+        return np.vstack([action_0_logits,-action_0_logits]).T
+
+    def obs2index(self, obs):
+        return np.sum(self.mask * obs[np.newaxis,:],-1)
 
 #------------------illustrative MLP baselines--------------------------
 
@@ -212,14 +243,15 @@ class MLPallagents(nn.Module):
         super().__init__()
         self.W = int(get_width(config))
         config.enc_out_dim = self.W
-        self.model = MLP(config.state_dim, config.enc_out_dim, config.num_actions*config.num_agents) 
+        self.model = MLP(config.state_dim, config.enc_out_dim, config.num_agents*config.num_actions) 
 
     def forward(self, state_seq, actions_seq):
         # state_seq: (bsz, seq_len, state_dim)
         # actions_seq: (bsz, seq_len, num_agents, num_actions)
+        batch_size, seq_len, num_agents, num_actions = actions_seq.shape
         current_state = torch.squeeze(state_seq[:,-1,:])
         
-        output=self.model(current_state).view((batch_size,num_agents, num_actions))
+        output=self.model(current_state).view((batch_size, num_agents, num_actions))
         return output
 
     def count_parameters(self,):
