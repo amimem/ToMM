@@ -69,13 +69,18 @@ class SeqEnc(nn.Module):
         input_seq = self.fc_in(input_seq)
         hx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)
         cx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)
-        output_seq = []
-        for step in range(seq_len):
-            hx, cx = self.seq_model_step(input_seq[step], (hx, cx))
-            if self.cross_talk:
-                hx = hx + self.attn(hx)
-            output_seq.append(hx.view((batch_size, num_agents, self.enc_hidden_dim)))
-        output_seq = torch.transpose(torch.stack(output_seq, dim=0), 0, 1) # batch_size, seq_len, num_agents, enc_hidden_dim
+        
+        if True:
+            output_seq = []
+            for step in range(seq_len):
+                hx, cx = self.seq_model_step(input_seq[step], (hx, cx))
+                if self.cross_talk:
+                    hx = hx + self.attn(hx)
+                output_seq.append(hx.view((batch_size, num_agents, self.enc_hidden_dim)))
+            output_seq = torch.transpose(torch.stack(output_seq, dim=0), 0, 1) # batch_size, seq_len, num_agents, enc_hidden_dim
+        else:
+            pass #TODO: Block process, e.g. Transformer
+
         output_seq = self.fc_out(output_seq) # batch_size, seq_len, num_agents, enc_out_dim
         encoded_contexts = torch.mean(output_seq,dim=1)  # (bsz, num_agents, enc_out_dim)
         return encoded_contexts 
@@ -121,7 +126,6 @@ class BufferAttentionDecoder():
             # batch_size x num_ground_agents x action_dim
             predicted_joint_actions = torch.cat(
                 predicted_joint_actions, axis=0)
-        # print(predicted_joint_actions.shape)
         return predicted_joint_actions
 
 
@@ -142,7 +146,7 @@ class MLP(nn.Module):
         return self.model(x)
 
 def get_width(v):
-    solve_quadratic = lambda a, b, c: -b+np.sqrt(b**2-4*a*c)/(2*a)
+    solve_quadratic = lambda a, b, c: (-b+np.sqrt(b**2-4*a*c))/(2*a)
     n_layers = 2
     if v.model_name == 'STOMP':
         # if v.decoder_type == 'MLP' and v.cross_talk:
@@ -180,6 +184,7 @@ def get_width(v):
         b = (v.seq_len+1)*v.num_actions +v.seq_len*v.state_dim
         c = -v.P
         W = solve_quadratic(a, b, c)
+        print(v.P)
     else:
         print('choose valid model name')
     minimum_capacity = 2
@@ -263,6 +268,7 @@ class sharedMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.W = int(get_width(config))
+        print(f"hidden_dim: {self.W}")
         config.enc_out_dim=self.W
         singleagent_context_size = config.seq_len*(config.state_dim + config.num_actions)
         self.model = MLP(singleagent_context_size, config.enc_out_dim, config.num_actions)

@@ -9,6 +9,7 @@ import os
 import hashlib
 import time
 from utils import numpy_scalar_to_python
+import numpy as np
 
 def load_data(data_dir, data_seed=0):
     data_filename = f"{data_dir}/data.h5"
@@ -32,19 +33,32 @@ def load_data(data_dir, data_seed=0):
 class CustomSeqDataset(Dataset):
     def __init__(self, states, actions, seq_len, num_actions):
 
-        self.states = [
-            torch.tensor(states[i:i+seq_len]).float()
-            for i in range(len(states) - seq_len)
-        ]
-        self.states = torch.stack(self.states)  
-        # num_seqs, seq_len, state_dim
-        self.actions = [
-            torch.tensor(actions[i:i+seq_len]).long()
-            for i in range(len(actions) - seq_len)
-        ]
-        self.actions = torch.stack(self.actions)
-        # num_seqs, seq_len, num_agents
-        print(f'made {len(self.states)} contexts')
+        
+        if False:
+            num_samples=len(states)
+            self.states = np.empty((num_samples, seq_len, states.shape[1]))
+            self.actions = np.empty((num_samples, seq_len, actions.shape[1]))
+
+            mask=np.ones(num_samples,dtype=bool)
+            index_list = np.arange(num_samples) 
+            for state_id in index_list:
+                mask[state_id] = False
+                indices_for_context=np.random.choice(index_list[mask],size=seq_len-1,replace=False)
+                self.states[state_id]=np.vstack([states[indices_for_context],states[state_id]])
+                self.actions[state_id]=np.vstack([actions[indices_for_context],actions[state_id]])
+                mask[state_id] = True
+            self.states = torch.from_numpy(self.states).float()# num_seqs, seq_len, state_dim
+            self.actions = torch.from_numpy(self.actions).long()# num_seqs, seq_len, num_agents
+        else:
+            self.states = [
+                torch.tensor(states[i:i+seq_len]).float()
+                for i in range(len(states) - seq_len)]
+            self.actions = [
+                torch.tensor(actions[i:i+seq_len]).long()
+                for i in range(len(actions) - seq_len)]
+            self.states = torch.stack(self.states)# num_seqs, seq_len, state_dim
+            self.actions = torch.stack(self.actions)# num_seqs, seq_len, num_agents
+        print(f'{self.states.shape} shaped contexts')
 
         self.seq_len = seq_len
         self.num_actions = num_actions

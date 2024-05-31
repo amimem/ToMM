@@ -50,7 +50,7 @@ def eval_perf(model, dataloader, and_train=False, optimizer=None):
         action_logit_vectors = model(state_seq, action_seqs)
 
         if hasattr(model, "decoder_type"):
-            if model.decoder_type == 'BuffAtt' and i==0:
+            if model.decoder_type == 'BuffAtt' and batch_step==0:
                 # waste first batch to populate buffer
                 model.decoder.append_to_buffer(target_actions)
                 continue
@@ -75,36 +75,40 @@ def eval_perf(model, dataloader, and_train=False, optimizer=None):
 
     return np.mean(batch_loss), np.mean(batch_accuracy)
 
+def get_data_and_configs(config):
+
+        data_dir = config['outdir'] + config['data_dir']
+        data, data_config = load_data(data_dir,data_seed=config['data_seed'])
+        data_config = SimpleNamespace(**data_config['file_attrs'])
+        model_config = SimpleNamespace(**config['model_config'])
+        config = SimpleNamespace(**config)
+
+        # make a directory for saving the results
+        save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        # hash the arguments except for the outdir
+        hash_dict = vars(config).copy()
+        hash_dict.pop('outdir')
+
+        # make a subdirectory for each run
+        hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
+        train_dir = os.path.join(save_dir, hash_var)
+        if not os.path.exists(train_dir):
+            os.makedirs(train_dir)
+
+        # initialize wandb
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        wandb_run_name = str(hash_var) + "_" + str(timestamp)
+        print("wandb run name: " + wandb_run_name, flush=True)
+
+        return data, data_config, model_config, config, train_dir
 
 def train(config):
 
-    data_dir = config['outdir'] + config['data_dir']
-    data, data_config = load_data(data_dir,data_seed=config['data_seed'])
-    data_config = SimpleNamespace(**data_config['file_attrs'])
-    model_config = SimpleNamespace(**config['model_config'])
-    config = SimpleNamespace(**config)
-
-    # make a directory for saving the results
-    save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    # hash the arguments except for the outdir
-    hash_dict = vars(config).copy()
-    hash_dict.pop('outdir')
-
-    # make a subdirectory for each run
-    hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
-    train_info_dir = os.path.join(save_dir, hash_var)
-    if not os.path.exists(train_info_dir):
-        os.makedirs(train_info_dir)
-
-    # initialize wandb
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    wandb_run_name = str(hash_var) + "_" + str(timestamp)
-    print("wandb run name: " + wandb_run_name, flush=True)
-
-
+    data, data_config, model_config, config, train_dir = get_data_and_configs(config)
+    
     train_dataloader, test_dataloader = get_seqdata_loaders(
         data,
         model_config.seq_len,
@@ -129,7 +133,7 @@ def train(config):
     # log number of parameters
     num_parameters = model.count_parameters()
     print(f"number of parameters: {num_parameters}", flush=True)
-    print("gap between P and num_parameters: ", config.P - num_parameters, flush=True)
+    print("gap: between P_estimated - P_actual = ", config.P - num_parameters, flush=True)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
@@ -187,16 +191,14 @@ def train(config):
     print(hash_var, flush=True)
 
     # also save config as yaml
-    with open(train_info_dir + "/model_config.yaml", 'w') as file:
+    with open(train_dir + "/model_config.yaml", 'w') as file:
         yaml.dump(model_config, file)
 
-    torch.save(model.state_dict(), train_info_dir + "/state_dict_final.pt")
+    torch.save(model.state_dict(), train_dir + "/state_dict_final.pt")
 
-    # time_str = time.strftime("%Y-%m-%d-%H-%M")
-    data_filename = f"{data_dir}"
-    df.to_csv(train_info_dir + "results.csv", index=False)
+    df.to_csv(train_dir + "results.csv", index=False)
 
-    return train_info_dir
+    return train_dir
 
 
 if __name__ == "__main__":
@@ -205,9 +207,10 @@ if __name__ == "__main__":
 
     # experiment parameters
     N = 10
-    K = 8
-    corr = 0.99
-    P = 1e6
+    K = 8 # 8 gives 2^8=256 distinct observations in ground system policy
+    corr = 0.8
+    P = int(1e6)
+    seq_len = 16
 
     #generate correlation-controlled (s,a)-tuple data
     dataset_config = {
@@ -223,16 +226,16 @@ if __name__ == "__main__":
 
     #----------------------------------
 
-    # model and training configuration for (s,a) sequence data
-    model_config = {'seq_len': 16}
+    # model and training configuration for (s,a) block data
+    model_config = {'seq_len': seq_len}
     # set architecture type:
-    # >STOMP
-    if True:
+    if False:
+        # >STOMP
         model_config['model_name'] = 'STOMP'
         # config['enc_MLPhidden_dim'] = 256
         # config['enc_hidden_dim'] = 256
         # config['enc_out_dim'] = 256
-        if True: # --single-agent baseline
+        if False: # --single-agent baseline
             model_config['cross_talk'] = False
             model_config['decoder_type'] = 'MLP'
         else: # --multi-agent baseline
@@ -242,19 +245,19 @@ if __name__ == "__main__":
     else:
         # >illustrative baselines
         # config['enc_out_dim'] = 256
-        if True: # unshared
+        if False: # unshared
             model_config['model_name'] = 'MLPperagent'
-        elif False: # shared
+        elif True: # shared
             model_config['model_name'] = 'sharedMLP'
         elif False: # 1 network 
-            model_config['model_name'] = 'MLPallgents'
+            model_config['model_name'] = 'MLPallagents'
         model_config['cross_talk'] = None
         model_config['decoder_type'] = None
 
     #set training parameters
     config = {
         'P': P,
-        'num_epochs': 1,
+        'num_epochs': 50,
         'learning_rate': 5e-5,
         'batch_size': 8,
         'train2test_ratio': 0.8,
