@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 # import custom functions
 from models import STOMP, MLPperagent,sharedMLP,MLPallagents
-from data_utils import load_data, get_data_loader, ContextDataset, generate_dataset_from_logitmodel
+from data_utils import load_data, ContextDataset, generate_dataset_from_logitmodel
 
 # get slurm job array index
 try:
@@ -21,8 +21,6 @@ try:
 except:
     job_id = -1
     print("Not running on a cluster")
-
-seed = 0
 
 
 # sets the seed for generating random numbers
@@ -83,6 +81,8 @@ def get_data_and_configs(config):
         data_config = SimpleNamespace(**data_config['file_attrs'])
         model_config = SimpleNamespace(**config['model_config'])
         config = SimpleNamespace(**config)
+        print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}")
+
 
         # make a directory for saving the results
         save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
@@ -110,8 +110,8 @@ def train(config):
 
     train_dataset, test_dataset, data_config, model_config, config, train_dir = get_data_and_configs(config)
     
-    contextualized_train_data = ContextDataset(train_dataset, seq_len, data_config.num_actions, check_duplicates=True)
-    contextualized_test_data = ContextDataset(test_dataset, seq_len, data_config.num_actions)
+    contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions, check_duplicates=True)
+    contextualized_test_data = ContextDataset(test_dataset, model_config.seq_len, data_config.num_actions)
     train_dataloader = DataLoader(
         contextualized_train_data, batch_size=config.batch_size, shuffle=True)
     test_dataloader = DataLoader(
@@ -200,29 +200,17 @@ def train(config):
 
     return train_dir
 
+def get_context_distinguishability_data(config):
 
-if __name__ == "__main__":
+    train_dataset, test_dataset, data_config, model_config, config, train_dir = get_data_and_configs(config)
+    
+    contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions, check_duplicates=True)
+    return contextualized_train_data.number_of_contexts_with_duplicates
 
+def assign_parameters():
+
+    #----------------------------------
     set_seed(seed)
-
-    # experiment parameters
-    N = 10 # [10,100,1000
-    corr = 0 # [0, 0.5, .99]
-    P = int(5e5) # big enough such that hidden width not too small? 
-    seq_len = 8 # adjust based on distinguishability of contexts
-    training_sample_budget = int(1e4)
-
-    # fixed training data properties
-    K = 8 # 8 gives 2^8=256 distinct observations in ground system policy, big enough even for largest N?
-    A = 2 
-
-    # training parameters (set as needed)
-    num_epochs = 50
-    learning_rate = 5e-5
-    batch_size = 8
-    data_seed = 0
-    seed = 0
-    evaluation_sample_size = int(1e4) # large enough for low seed variability
     #----------------------------------
 
     #generate correlation-controlled (s,a)-tuple data
@@ -232,7 +220,7 @@ if __name__ == "__main__":
         "outdir" : "output/",
         "num_actions":A,
         "num_agents": N,
-        "state_dim": K,
+        "state_dim": S,
         "model_name":"logit",
         "corr": corr
     }
@@ -281,6 +269,50 @@ if __name__ == "__main__":
         model_config['decoder_type'] = None
     train_config['model_config'] = model_config
 
-    store_name = train(train_config)
+    return dataset_config,train_config
 
-    print(f'finished. output stored at: {store_name}')
+
+if __name__ == "__main__":
+
+    # experiment parameters
+    N = 10 # num agents. [10,100,1000]
+    corr = 0 # pairwise correlation in data generated from logit model. [0, 0.5, .99]
+    P = int(5e5) # training model size. big enough such that hidden width not too small? 
+    seq_len = 8 # context length. adjust based on distinguishability of contexts
+    training_sample_budget = int(1e4)
+
+    # fixed training data properties
+    S = 8 # state space dim 8 gives 2^8=256 distinct observations in ground system policy, big enough even for largest N?
+    A = 2 # single-agent action space dim
+
+    # training parameters (set as needed)
+    num_epochs = 50
+    learning_rate = 5e-5
+    batch_size = 8
+    data_seed = 0
+    seed = 0
+    evaluation_sample_size = int(1e4) # large enough for low variability of test accuracy across data_seeds
+
+    dataset_config,train_config=assign_parameters()
+    
+    if False:
+        Nvec=[10,100]
+        svec=[4,8,12,16,20]
+        corrvec=[0,0.3,0.6,0.9,1.0]
+        count_data=[]
+
+        for nit,N in enumerate(Nvec):
+            for sit,seq_len in enumerate(svec):
+                for cit,corr in enumerate(corrvec):
+                    dataset_config['num_agents']=N
+                    dataset_config['corr']=corr
+                    data_dir=generate_dataset_from_logitmodel(dataset_config)
+                    train_config['data_dir'] =data_dir
+                    train_config['model_config']['seq_len'] = seq_len
+                    count_data.append([N,seq_len,corr,get_context_distinguishability_data(train_config)/training_sample_budget])
+        df=pd.DataFrame(count_data,columns=['N','seqlen','corr','count'])
+        file_name = 'distinguishability_df.csv'
+        df.to_csv(file_name,index=False)
+    else:
+        store_name = train(train_config)
+        print(f'finished. output stored at: {store_name}')

@@ -36,6 +36,7 @@ class ContextDataset(Dataset):
 
         states = data["states"]
         actions = data["actions"]
+
         if False:
             num_samples=len(states)
             self.states = np.empty((num_samples, seq_len, states.shape[1]))
@@ -62,11 +63,12 @@ class ContextDataset(Dataset):
             self.actions = torch.stack(self.actions)# num_seqs, seq_len, num_agents
 
         if check_duplicates:
+            print('Checking duplicates: ')
             has_context_duplicates = torch.zeros(len(self.states))
             tmpacts=self.actions.transpose(1,2)
             for i in range(len(self.actions)): 
                 if i % 1000 == 0:
-                    print(f"{i*100/len(self.actions)}%")
+                    print(f"{int((i/len(self.actions))*100)}%",end="\r")
                 for ag_i in range(actions.shape[1]):
                     for ag_j in range(actions.shape[1]):
                         if ag_i!=ag_j:
@@ -77,7 +79,8 @@ class ContextDataset(Dataset):
                         continue
                     break
             self.number_of_contexts_with_duplicates =int(torch.sum(has_context_duplicates))
-            print(f'{self.states.shape} shaped contexts with {self.number_of_contexts_with_duplicates} duplicates')
+            print()
+            print(f'{self.states.shape[:2]} shaped contexts with {self.number_of_contexts_with_duplicates} duplicates')
 
         self.seq_len = seq_len
         self.num_actions = num_actions
