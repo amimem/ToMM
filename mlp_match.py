@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader
 import torch
 import wandb
 import time
@@ -12,7 +13,7 @@ from types import SimpleNamespace
 
 # import custom functions
 from models import STOMP, MLPperagent,sharedMLP,MLPallagents
-from data_utils import load_data, get_seqdata_loaders, generate_dataset_from_logitmodel
+from data_utils import load_data, get_data_loader, ContextDataset, generate_dataset_from_logitmodel
 
 # get slurm job array index
 try:
@@ -78,7 +79,7 @@ def eval_perf(model, dataloader, and_train=False, optimizer=None):
 def get_data_and_configs(config):
 
         data_dir = config['outdir'] + config['data_dir']
-        data, data_config = load_data(data_dir,data_seed=config['data_seed'])
+        train_data, test_data, data_config = load_data(data_dir,data_seed=config['data_seed'])
         data_config = SimpleNamespace(**data_config['file_attrs'])
         model_config = SimpleNamespace(**config['model_config'])
         config = SimpleNamespace(**config)
@@ -103,19 +104,19 @@ def get_data_and_configs(config):
         wandb_run_name = str(hash_var) + "_" + str(timestamp)
         print("wandb run name: " + wandb_run_name, flush=True)
 
-        return data, data_config, model_config, config, train_dir
+        return train_data, test_data, data_config, model_config, config, train_dir
 
 def train(config):
 
-    data, data_config, model_config, config, train_dir = get_data_and_configs(config)
+    train_dataset, test_dataset, data_config, model_config, config, train_dir = get_data_and_configs(config)
     
-    train_dataloader, test_dataloader = get_seqdata_loaders(
-        data,
-        model_config.seq_len,
-        num_actions=data_config.num_actions,
-        train2test_ratio=config.train2test_ratio,
-        batch_size=config.batch_size,
-    )
+    contextualized_train_data = ContextDataset(train_dataset, seq_len, data_config.num_actions, check_duplicates=True)
+    contextualized_test_data = ContextDataset(test_dataset, seq_len, data_config.num_actions)
+    train_dataloader = DataLoader(
+        contextualized_train_data, batch_size=config.batch_size, shuffle=True)
+    test_dataloader = DataLoader(
+        contextualized_test_data, batch_size=config.batch_size, shuffle=False)
+    
     model_config.num_actions = train_dataloader.dataset.num_actions
     model_config.num_agents = train_dataloader.dataset.num_agents
     model_config.state_dim = train_dataloader.dataset.state_dim
@@ -132,15 +133,14 @@ def train(config):
 
     # log number of parameters
     num_parameters = model.count_parameters()
-    print(f"number of parameters: {num_parameters}", flush=True)
-    print("gap: between P_estimated - P_actual = ", config.P - num_parameters, flush=True)
+    print(f"number of parameters: {num_parameters} (rel. est. error: {(config.P - num_parameters)/num_parameters:.4f})", flush=True)
 
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
         f"with modelsize {model_config.P} for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
 
-    # wandb.init(project="TOGM", group="archcompare",job_type=None, config=vars(config))
+    # wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
     for epoch in range(config.num_epochs):
         st=time.time()
         train_epoch_loss, train_epoch_accuracy = eval_perf(
@@ -152,7 +152,7 @@ def train(config):
             f"Epoch {epoch+1}/{config.num_epochs}, " +
             f"Train/Test Loss: {train_epoch_loss:.4f}/{test_epoch_loss:.4f}, " +
             f"Accuracy: {train_epoch_accuracy:.4f}/{test_epoch_accuracy:.4f}, " +
-            f"took {int(time.time()-st)}"
+            f"took {int(time.time()-st)} s"
         )
         # wandb.log({
         #     "epoch": epoch,
@@ -206,29 +206,55 @@ if __name__ == "__main__":
     set_seed(seed)
 
     # experiment parameters
-    N = 10
-    K = 8 # 8 gives 2^8=256 distinct observations in ground system policy
-    corr = 0.8
-    P = int(1e6)
-    seq_len = 16
+    N = 10 # [10,100,1000
+    corr = 0 # [0, 0.5, .99]
+    P = int(5e5) # big enough such that hidden width not too small? 
+    seq_len = 8 # adjust based on distinguishability of contexts
+    training_sample_budget = int(1e4)
+
+    # fixed training data properties
+    K = 8 # 8 gives 2^8=256 distinct observations in ground system policy, big enough even for largest N?
+    A = 2 
+
+    # training parameters (set as needed)
+    num_epochs = 50
+    learning_rate = 5e-5
+    batch_size = 8
+    data_seed = 0
+    seed = 0
+    evaluation_sample_size = int(1e4) # large enough for low seed variability
+    #----------------------------------
 
     #generate correlation-controlled (s,a)-tuple data
     dataset_config = {
-        "num_samples": int(1e4),
+        "num_train_samples": training_sample_budget,
+        "num_test_samples": evaluation_sample_size,
         "outdir" : "output/",
-        "num_actions":2,
+        "num_actions":A,
         "num_agents": N,
         "state_dim": K,
         "model_name":"logit",
         "corr": corr
     }
+
     data_dir=generate_dataset_from_logitmodel(dataset_config)
 
     #----------------------------------
 
-    # model and training configuration for (s,a) block data
+    # training configuration for (s,a) block data
+    train_config = {
+        'P': P,
+        'num_epochs': num_epochs,
+        'learning_rate': learning_rate,
+        'batch_size': batch_size,
+        'data_dir': data_dir,
+        'data_seed': data_seed,
+        'outdir': 'output/',
+        'seed': seed
+        }
+
+    # add model architexture configuration    
     model_config = {'seq_len': seq_len}
-    # set architecture type:
     if False:
         # >STOMP
         model_config['model_name'] = 'STOMP'
@@ -253,21 +279,8 @@ if __name__ == "__main__":
             model_config['model_name'] = 'MLPallagents'
         model_config['cross_talk'] = None
         model_config['decoder_type'] = None
+    train_config['model_config'] = model_config
 
-    #set training parameters
-    config = {
-        'P': P,
-        'num_epochs': 50,
-        'learning_rate': 5e-5,
-        'batch_size': 8,
-        'train2test_ratio': 0.8,
-        'data_dir': data_dir,
-        'data_seed': 0,
-        'model_config': model_config,
-        'outdir': 'output/',
-        'seed': seed
-        }
-
-    store_name = train(config)
+    store_name = train(train_config)
 
     print(f'finished. output stored at: {store_name}')

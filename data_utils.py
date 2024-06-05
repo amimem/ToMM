@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import h5py
 import numpy as np
 import yaml
@@ -26,14 +26,16 @@ def load_data(data_dir, data_seed=0):
         config = yaml.load(f, Loader=yaml.FullLoader)
         print(config, flush=True)
 
-    dataset = datasets[f"dataset_{data_seed}"]
-    return dataset, config
+    train_dataset = datasets[f"train_dataset_{data_seed}"]
+    test_dataset = datasets[f"test_dataset_{data_seed}"]
+    return train_dataset, test_dataset, config
 
 
-class CustomSeqDataset(Dataset):
-    def __init__(self, states, actions, seq_len, num_actions):
+class ContextDataset(Dataset):
+    def __init__(self, data, seq_len, num_actions, check_duplicates=False):
 
-        
+        states = data["states"]
+        actions = data["actions"]
         if False:
             num_samples=len(states)
             self.states = np.empty((num_samples, seq_len, states.shape[1]))
@@ -58,7 +60,24 @@ class CustomSeqDataset(Dataset):
                 for i in range(len(actions) - seq_len)]
             self.states = torch.stack(self.states)# num_seqs, seq_len, state_dim
             self.actions = torch.stack(self.actions)# num_seqs, seq_len, num_agents
-        print(f'{self.states.shape} shaped contexts')
+
+        if check_duplicates:
+            has_context_duplicates = torch.zeros(len(self.states))
+            tmpacts=self.actions.transpose(1,2)
+            for i in range(len(self.actions)): 
+                if i % 1000 == 0:
+                    print(f"{i*100/len(self.actions)}%")
+                for ag_i in range(actions.shape[1]):
+                    for ag_j in range(actions.shape[1]):
+                        if ag_i!=ag_j:
+                            if torch.all(tmpacts[i,ag_i]==tmpacts[i,ag_j]):
+                                has_context_duplicates[i] = True
+                                break
+                    else:
+                        continue
+                    break
+            self.number_of_contexts_with_duplicates =int(torch.sum(has_context_duplicates))
+            print(f'{self.states.shape} shaped contexts with {self.number_of_contexts_with_duplicates} duplicates')
 
         self.seq_len = seq_len
         self.num_actions = num_actions
@@ -83,51 +102,30 @@ class CustomSeqDataset(Dataset):
         return states, action_onehots_seq, target_actions
 
 
-def get_seqdata_loaders(data, seq_len, num_actions=2, train2test_ratio=0.8, batch_size=8):
-    states = data["states"]
-    actions = data["actions"]
-    # shape of states: (num_states, state_dim)
-    # shape of actions: (num_states, num_agents)
-    print(f"state data dims: {states.shape}, action data dims: {actions.shape}")
-
-    splt = int(train2test_ratio*states.shape[0])
-    print(f"using {splt}/{states.shape[0]-splt} samples to train/test")
-    train_dataset = CustomSeqDataset(
-        states[:splt], actions[:splt], seq_len, num_actions)
-    test_dataset = CustomSeqDataset(
-        states[splt:], actions[splt:], seq_len, num_actions)
-
-    train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False)
-    return train_dataloader, test_dataloader
-
-
 def generate_dataset_from_logitmodel(config):
 
     datasets = {}
-    seed_list = range(2)
-    for ix, seed in enumerate(seed_list):
-        print(f"running seed {seed} of {len(seed_list)}")
-        rng = np.random.default_rng(seed=seed)
+    data_seed_list = range(2)
+    for ix, data_seed in enumerate(data_seed_list):
+        print(f"running seed {data_seed} of {len(data_seed_list)}")
+        rng = np.random.default_rng(seed=data_seed)
 
-        states=sample_states(config['num_samples'],config['state_dim'],rng)
         model=logit(SimpleNamespace(**config),rng)
-        actions= []
-        for state in states:
-            action_probability_vectors = model.forward(state)
-            # print(action_probability_vectors.shape)
-            actions.append(np.argmax(action_probability_vectors, axis=-1))
-        actions = np.vstack(actions)
-        # save data
-        shuffled_inds= rng.permutation(config['num_samples'])
-        datasets[f"dataset_{seed}"] = { 
-            "seed": seed, 
-            "states": states[shuffled_inds], 
-            "actions": actions[shuffled_inds],
-            "preferred_actions": model.action_at_corr1
-            }
+        for label in ['train','test']:
+            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],rng)
+            actions= []
+            for state in states:
+                action_probability_vectors = model.forward(state)
+                actions.append(np.argmax(action_probability_vectors, axis=-1))
+            actions = np.vstack(actions)
+            # save data
+            shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
+            datasets[f"{label}_dataset_{data_seed}"] = { 
+                "data_seed": data_seed, 
+                "states": states[shuffled_inds], 
+                "actions": actions[shuffled_inds],
+                "preferred_actions": model.action_at_corr1
+                }
 
     data_hash=save_dataset_from_model(config, datasets)
 

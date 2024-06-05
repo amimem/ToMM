@@ -29,10 +29,10 @@ class STOMP(nn.Module):
     def forward(self, state_seq, actions_seq):
         # state_seq: (bsz, seq_len, state_dim)
         # actions_seq: (bsz, seq_len, num_agents, num_actions)
-        encoded_contexts = self.seq_enc(state_seq, actions_seq)# (bsz, seq_len, num_agents, enc_dim)
+        encoded_contexts = self.seq_enc(state_seq, actions_seq) # (bsz, num_agents, enc_dim)
         action_logit_vectors = self.decoder.forward(
             torch.mean(encoded_contexts,dim=1) if self.decoder_type == 'BuffAtt' # (bsz, enc_dim)
-            else encoded_contexts  # (bsz, num_agents, enc_dim)
+            else encoded_contexts  
         )
         return action_logit_vectors
 
@@ -109,8 +109,8 @@ class BufferAttentionDecoder():
             self.joint_action_history, action_onehots_batch], dim=0)  # history_size x num_ground_agents x action_dim
 
     def forward(self, context_samples):
-        batch_size, enc_dim = context_samples.shape
-        self.current_context_batch = context_samples
+        batch_size, num_agents, enc_dim = context_samples.shape
+        self.current_context_batch = context_samples # batch_size x num_ground_agents x enc_dim
         if self.context_history == None:
             predicted_joint_actions = F.softmax(torch.ones(
                 (batch_size, self.bufferoutput_dim[0], self.bufferoutput_dim[1])),dim=-1)
@@ -123,9 +123,9 @@ class BufferAttentionDecoder():
                     -2, -1, 0), attention_weights)  # num_ground_agents x action_dim
                 predicted_joint_actions.append(
                     abs_predicted_joint_action.unsqueeze(0))
-            # batch_size x num_ground_agents x action_dim
+            
             predicted_joint_actions = torch.cat(
-                predicted_joint_actions, axis=0)
+                predicted_joint_actions, axis=0) # batch_size x num_ground_agents x action_dim
         return predicted_joint_actions
 
 
@@ -180,11 +180,11 @@ def get_width(v):
         c = -v.P
         W = solve_quadratic(a, b, c)
     elif v.model_name == 'sharedMLP':
+        print(v.model_name)
         a = n_layers
-        b = (v.seq_len+1)*v.num_actions +v.seq_len*v.state_dim
+        b = v.state_dim +v.seq_len*(v.num_actions +v.state_dim)
         c = -v.P
         W = solve_quadratic(a, b, c)
-        print(v.P)
     else:
         print('choose valid model name')
     minimum_capacity = 2
@@ -224,6 +224,7 @@ class MLPperagent(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.W = int(get_width(config))
+        print(f"hidden_dim: {self.W}")
         config.enc_out_dim = self.W
         self.model = nn.ModuleList([MLP(config.state_dim, config.enc_out_dim, config.num_actions) 
             for agent in range(config.num_agents)])
@@ -247,6 +248,7 @@ class MLPallagents(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.W = int(get_width(config))
+        print(f"hidden_dim: {self.W}")
         config.enc_out_dim = self.W
         self.model = MLP(config.state_dim, config.enc_out_dim, config.num_agents*config.num_actions) 
 
