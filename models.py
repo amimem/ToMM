@@ -169,17 +169,17 @@ def get_width(v):
         #     b = v.M_model*(v.state_dim)
         #     c = v.num_agents*v.M_model-v.P
         #     W = solve_quadratic(a, b, c)
-    elif v.model_name == 'MLPperagent':
+    elif v.model_name == 'MLP_nosharing':
         a = n_layers
         b = v.state_dim+v.num_actions
         c = -v.P/v.num_agents
         W = solve_quadratic(a, b, c)
-    elif v.model_name == 'MLPallagents':
+    elif v.model_name == 'MLP_encodersharingonly':
         a = n_layers
         b = v.state_dim+v.num_actions*v.num_agents
         c = -v.P
         W = solve_quadratic(a, b, c)
-    elif v.model_name == 'sharedMLP':
+    elif v.model_name == 'MLP_fullsharing':
         print(v.model_name)
         a = n_layers
         b = v.state_dim +v.seq_len*(v.num_actions +v.state_dim)
@@ -220,73 +220,126 @@ class logit(nn.Module):
 
 #------------------illustrative MLP baselines--------------------------
 
-class MLPperagent(nn.Module):
+class MLPbaselines(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.W = int(get_width(config))
         print(f"hidden_dim: {self.W}")
         config.enc_out_dim = self.W
-        self.model = nn.ModuleList([MLP(config.state_dim, config.enc_out_dim, config.num_actions) 
-            for agent in range(config.num_agents)])
+
+        self.model_name = config.model_name
+        if self.model_name == 'MLP_nosharing':
+            self.model = nn.ModuleList([MLP(config.state_dim, config.enc_out_dim, config.num_actions) 
+                for agent in range(config.num_agents)])
+        elif self.model_name == 'MLP_fullsharing':
+            singleagent_context_size = config.seq_len*(config.state_dim + config.num_actions)
+            self.model = MLP(singleagent_context_size, config.enc_out_dim, config.num_actions)
+        elif self.model_name == 'MLP_encodersharingonly':
+            self.model = MLP(config.state_dim, config.enc_out_dim, config.num_agents*config.num_actions) 
+        else:
+            print('select valid MLP baseline type')
 
     def forward(self, state_seq, actions_seq):
         # state_seq: (bsz, seq_len, state_dim)
         # actions_seq: (bsz, seq_len, num_agents, num_actions)
+
         current_state = torch.squeeze(state_seq[:,-1,:])
         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-        action_logits = []
-        for agent in range(num_agents):
-            action_logits.append(self.model[agent](current_state).unsqueeze(dim=1)) # (batch_size,1,num_actions)
-        return torch.cat(action_logits,dim=1) # (batch_size,num_agents,num_actions)
+
+        if self.model_name=='MLP_nosharing':
+            action_logits = []
+            for agent in range(num_agents):
+                action_logits.append(self.model[agent](current_state).unsqueeze(dim=1)) # (batch_size,1,num_actions)
+            output=torch.cat(action_logits,dim=1) # (batch_size,num_agents,num_actions)
+        elif self.model_name == 'MLP_fullsharing':
+            flattened_context = torch.cat((
+                torch.unsqueeze(torch.flatten(state_seq,start_dim=1),1).repeat((1,num_agents,1)), #(bsz, num_agents, seq_len*state_dim)
+                torch.flatten(torch.transpose(actions_seq,1,2),start_dim=2) #(bsz, num_agents, seq_len*num_actions)
+                ),dim=2).view(batch_size*num_agents,-1) #(bsz*num_agents, seq_len*(state_dim +num_actions))
+            output=self.model(flattened_context).view(*(batch_size, num_agents, num_actions))
+        elif self.model_name == 'MLP_encodersharingonly':
+            output=self.model(current_state).view((batch_size, num_agents, num_actions))
+        else:
+            print('select valid MLP baseline type')
+
+        return output
 
     def count_parameters(self,):
         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
-class MLPallagents(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.W = int(get_width(config))
-        print(f"hidden_dim: {self.W}")
-        config.enc_out_dim = self.W
-        self.model = MLP(config.state_dim, config.enc_out_dim, config.num_agents*config.num_actions) 
 
-    def forward(self, state_seq, actions_seq):
-        # state_seq: (bsz, seq_len, state_dim)
-        # actions_seq: (bsz, seq_len, num_agents, num_actions)
-        batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-        current_state = torch.squeeze(state_seq[:,-1,:])
+
+
+
+# class MLPperagent(nn.Module):
+#     def __init__(self, config):
+#         super().__init__()
+#         self.W = int(get_width(config))
+#         print(f"hidden_dim: {self.W}")
+#         config.enc_out_dim = self.W
+#         self.model = nn.ModuleList([MLP(config.state_dim, config.enc_out_dim, config.num_actions) 
+#             for agent in range(config.num_agents)])
+
+#     def forward(self, state_seq, actions_seq):
+#         # state_seq: (bsz, seq_len, state_dim)
+#         # actions_seq: (bsz, seq_len, num_agents, num_actions)
+#         current_state = torch.squeeze(state_seq[:,-1,:])
+#         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
+#         action_logits = []
+#         for agent in range(num_agents):
+#             action_logits.append(self.model[agent](current_state).unsqueeze(dim=1)) # (batch_size,1,num_actions)
+#         return torch.cat(action_logits,dim=1) # (batch_size,num_agents,num_actions)
+
+#     def count_parameters(self,):
+#         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
+#         return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+
+# class MLPallagents(nn.Module):
+#     def __init__(self, config):
+#         super().__init__()
+#         self.W = int(get_width(config))
+#         print(f"hidden_dim: {self.W}")
+#         config.enc_out_dim = self.W
+#         self.model = MLP(config.state_dim, config.enc_out_dim, config.num_agents*config.num_actions) 
+
+#     def forward(self, state_seq, actions_seq):
+#         # state_seq: (bsz, seq_len, state_dim)
+#         # actions_seq: (bsz, seq_len, num_agents, num_actions)
+#         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
+#         current_state = torch.squeeze(state_seq[:,-1,:])
         
-        output=self.model(current_state).view((batch_size, num_agents, num_actions))
-        return output
+#         output=self.model(current_state).view((batch_size, num_agents, num_actions))
+#         return output
 
-    def count_parameters(self,):
-        assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+#     def count_parameters(self,):
+#         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
+#         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
-class sharedMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.W = int(get_width(config))
-        print(f"hidden_dim: {self.W}")
-        config.enc_out_dim=self.W
-        singleagent_context_size = config.seq_len*(config.state_dim + config.num_actions)
-        self.model = MLP(singleagent_context_size, config.enc_out_dim, config.num_actions)
+# class sharedMLP(nn.Module):
+#     def __init__(self, config):
+#         super().__init__()
+#         self.W = int(get_width(config))
+#         print(f"hidden_dim: {self.W}")
+#         config.enc_out_dim=self.W
+#         singleagent_context_size = config.seq_len*(config.state_dim + config.num_actions)
+#         self.model = MLP(singleagent_context_size, config.enc_out_dim, config.num_actions)
 
-    def forward(self,state_seq, actions_seq):
-        # state_seq: (bsz, seq_len, state_dim)
-        # actions_seq: (bsz, seq_len, num_agents, num_actions)
-        batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-        action_logits = []
-        flattened_context = torch.cat((
-            torch.unsqueeze(torch.flatten(state_seq,start_dim=1),1).repeat((1,num_agents,1)), #(bsz, num_agents, seq_len*state_dim)
-            torch.flatten(torch.transpose(actions_seq,1,2),start_dim=2) #(bsz, num_agents, seq_len*num_actions)
-            ),dim=2).view(batch_size*num_agents,-1) #(bsz*num_agents, seq_len*(state_dim +num_actions))
-        output=self.model(flattened_context).view(*(batch_size, num_agents, num_actions))
-        return output
+#     def forward(self,state_seq, actions_seq):
+#         # state_seq: (bsz, seq_len, state_dim)
+#         # actions_seq: (bsz, seq_len, num_agents, num_actions)
+#         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
+#         action_logits = []
+#         flattened_context = torch.cat((
+#             torch.unsqueeze(torch.flatten(state_seq,start_dim=1),1).repeat((1,num_agents,1)), #(bsz, num_agents, seq_len*state_dim)
+#             torch.flatten(torch.transpose(actions_seq,1,2),start_dim=2) #(bsz, num_agents, seq_len*num_actions)
+#             ),dim=2).view(batch_size*num_agents,-1) #(bsz*num_agents, seq_len*(state_dim +num_actions))
+#         output=self.model(flattened_context).view(*(batch_size, num_agents, num_actions))
+#         return output
 
-    def count_parameters(self,):
-        assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+#     def count_parameters(self,):
+#         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
+#         return sum(p.numel() for p in self.parameters() if p.requires_grad)

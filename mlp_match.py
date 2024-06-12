@@ -12,7 +12,7 @@ import yaml
 from types import SimpleNamespace
 
 # import custom functions
-from models import STOMP, MLPperagent,sharedMLP,MLPallagents
+from models import STOMP, MLPbaselines
 from data_utils import load_data, ContextDataset, generate_dataset_from_logitmodel
 
 # get slurm job array index
@@ -110,7 +110,7 @@ def train(config):
 
     train_dataset, test_dataset, data_config, model_config, config, train_dir = get_data_and_configs(config)
     
-    contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions, check_duplicates=True)
+    contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions)
     contextualized_test_data = ContextDataset(test_dataset, model_config.seq_len, data_config.num_actions)
     train_dataloader = DataLoader(
         contextualized_train_data, batch_size=config.batch_size, shuffle=True)
@@ -124,12 +124,12 @@ def train(config):
  
     if model_config.model_name=='STOMP':
         model = STOMP(model_config)
-    elif model_config.model_name=='MLPperagent':
-        model = MLPperagent(model_config)
-    elif model_config.model_name =='sharedMLP':
-        model = sharedMLP(model_config)
-    elif model_config.model_name =='MLPallagents':
-        model = MLPallagents(model_config)
+    elif model_config.model_name.split('_')[0]=='MLP':
+        model = MLPbaselines(model_config)
+    # elif model_config.model_name =='sharedMLP':
+    #     model = sharedMLP(model_config)
+    # elif model_config.model_name =='MLPallagents':
+    #     model = MLPallagents(model_config)
 
     # log number of parameters
     num_parameters = model.count_parameters()
@@ -207,7 +207,7 @@ def get_context_distinguishability_data(config):
     contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions, check_duplicates=True)
     return contextualized_train_data.number_of_contexts_with_duplicates
 
-def assign_parameters():
+def collect_parameters():
 
     #----------------------------------
     set_seed(seed)
@@ -260,11 +260,11 @@ def assign_parameters():
         # >illustrative baselines
         # config['enc_out_dim'] = 256
         if False: # unshared
-            model_config['model_name'] = 'MLPperagent'
+            model_config['model_name'] = 'MLP_nosharing' #peragent'
         elif True: # shared
-            model_config['model_name'] = 'sharedMLP'
+            model_config['model_name'] = 'MLP_fullsharing' #sharedMLP
         elif False: # 1 network 
-            model_config['model_name'] = 'MLPallagents'
+            model_config['model_name'] = 'MLP_encodersharingonly' #allagents
         model_config['cross_talk'] = None
         model_config['decoder_type'] = None
     train_config['model_config'] = model_config
@@ -293,9 +293,9 @@ if __name__ == "__main__":
     seed = 0
     evaluation_sample_size = int(1e4) # large enough for low variability of test accuracy across data_seeds
 
-    dataset_config,train_config=assign_parameters()
+    dataset_config,train_config=collect_parameters()
     
-    if False:
+    if False: #distinguishability analysis
         Nvec=[10,100]
         svec=[4,8,12,16,20]
         corrvec=[0,0.3,0.6,0.9,1.0]
@@ -313,6 +313,6 @@ if __name__ == "__main__":
         df=pd.DataFrame(count_data,columns=['N','seqlen','corr','count'])
         file_name = 'distinguishability_df.csv'
         df.to_csv(file_name,index=False)
-    else:
+    else: #training experiment
         store_name = train(train_config)
         print(f'finished. output stored at: {store_name}')
