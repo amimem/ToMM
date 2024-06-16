@@ -30,6 +30,7 @@ class STOMP(nn.Module):
         # state_seq: (bsz, seq_len, state_dim)
         # actions_seq: (bsz, seq_len, num_agents, num_actions)
         encoded_contexts = self.seq_enc(state_seq, actions_seq) # (bsz, num_agents, enc_dim)
+        
         action_logit_vectors = self.decoder.forward(
             torch.mean(encoded_contexts,dim=1) if self.decoder_type == 'BuffAtt' # (bsz, enc_dim)
             else encoded_contexts  
@@ -47,8 +48,10 @@ class SeqEnc(nn.Module):
         super().__init__()
         self.enc_hidden_dim = config.enc_hidden_dim
         self.cross_talk = cross_talk
-        self.seq_model_step = nn.LSTMCell(
+        self.seq_stepmodel_time = nn.LSTMCell(
             self.enc_hidden_dim, self.enc_hidden_dim)
+        self.seq_model_agent = nn.LSTM(
+            self.enc_hidden_dim, int(self.enc_hidden_dim/2), batch_first=True,bidirectional=True)
         if self.cross_talk:
             self.crosstalk_key = nn.Linear(self.enc_hidden_dim, self.enc_hidden_dim)
             self.crosstalk_query = nn.Linear(self.enc_hidden_dim, self.enc_hidden_dim)
@@ -60,29 +63,40 @@ class SeqEnc(nn.Module):
 
         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
         batch_size, seq_len, state_dim = state_seq.shape
-
         state_seq = torch.unsqueeze(state_seq, 2).repeat((1, 1, num_agents, 1))
+        batch_size, seq_len, num_agents, state_dim = state_seq.shape
 
-        # seq_len, batch_size, num_agents,state_dim+num_actions
+        # seq_len, batch_size + num_agents, state_dim + num_actions
         input_seq = torch.transpose(
             torch.cat([state_seq, actions_seq], dim=-1), 0, 1).flatten(1, 2)
-        input_seq = self.fc_in(input_seq)
-        hx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)
-        cx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)
         
-        if True:
-            output_seq = []
-            for step in range(seq_len):
-                hx, cx = self.seq_model_step(input_seq[step], (hx, cx))
-                if self.cross_talk:
-                    hx = hx + self.attn(hx)
-                output_seq.append(hx.view((batch_size, num_agents, self.enc_hidden_dim)))
-            output_seq = torch.transpose(torch.stack(output_seq, dim=0), 0, 1) # batch_size, seq_len, num_agents, enc_hidden_dim
-        else:
-            pass #TODO: Block process, e.g. Transformer
+        #project to encoder's hidden state:
+        # seq_len, batch_size*num_agents, enc_hidden_dim
+        input_seq = self.fc_in(input_seq)
 
-        output_seq = self.fc_out(output_seq) # batch_size, seq_len, num_agents, enc_out_dim
-        encoded_contexts = torch.mean(output_seq,dim=1)  # (bsz, num_agents, enc_out_dim)
+        hx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)
+        cx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)        
+        # output_seq = []
+        for step in range(seq_len):
+            hx, cx = self.seq_stepmodel_time(input_seq[step], (hx, cx))
+            if self.cross_talk:
+                hx = hx + self.attn(hx)
+            # output_seq.append(hx.view((batch_size, num_agents, self.enc_hidden_dim)))
+        # output_seq = torch.transpose(torch.stack(output_seq, dim=0), 0, 1) # batch_size, seq_len, num_agents, enc_hidden_dim
+        # output = hx.view((batch_size, num_agents, self.enc_hidden_dim))
+
+        # num_agents, batch_Size
+        o_block = hx.view((batch_size, num_agents, self.enc_hidden_dim))
+        hx = torch.randn(2, batch_size, int(self.enc_hidden_dim/2))
+        cx = torch.randn(2, batch_size, int(self.enc_hidden_dim/2))      
+        encoded_contexts, _ = self.seq_model_agent(o_block, (hx, cx))
+        # (batch_size, num_agents, self.enc_hidden_dim)
+
+
+        # TODO: Block process, e.g. Transformer
+
+        # output_seq = self.fc_out(output_seq) # batch_size, seq_len, num_agents, enc_out_dim
+        # encoded_contexts = torch.mean(output_seq,dim=1)  # (bsz, num_agents, enc_out_dim)
         return encoded_contexts 
 
     def attn(self, h):
@@ -267,79 +281,3 @@ class MLPbaselines(nn.Module):
     def count_parameters(self,):
         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
-
-
-
-
-
-# class MLPperagent(nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.W = int(get_width(config))
-#         print(f"hidden_dim: {self.W}")
-#         config.enc_out_dim = self.W
-#         self.model = nn.ModuleList([MLP(config.state_dim, config.enc_out_dim, config.num_actions) 
-#             for agent in range(config.num_agents)])
-
-#     def forward(self, state_seq, actions_seq):
-#         # state_seq: (bsz, seq_len, state_dim)
-#         # actions_seq: (bsz, seq_len, num_agents, num_actions)
-#         current_state = torch.squeeze(state_seq[:,-1,:])
-#         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-#         action_logits = []
-#         for agent in range(num_agents):
-#             action_logits.append(self.model[agent](current_state).unsqueeze(dim=1)) # (batch_size,1,num_actions)
-#         return torch.cat(action_logits,dim=1) # (batch_size,num_agents,num_actions)
-
-#     def count_parameters(self,):
-#         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
-#         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
-
-# class MLPallagents(nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.W = int(get_width(config))
-#         print(f"hidden_dim: {self.W}")
-#         config.enc_out_dim = self.W
-#         self.model = MLP(config.state_dim, config.enc_out_dim, config.num_agents*config.num_actions) 
-
-#     def forward(self, state_seq, actions_seq):
-#         # state_seq: (bsz, seq_len, state_dim)
-#         # actions_seq: (bsz, seq_len, num_agents, num_actions)
-#         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-#         current_state = torch.squeeze(state_seq[:,-1,:])
-        
-#         output=self.model(current_state).view((batch_size, num_agents, num_actions))
-#         return output
-
-#     def count_parameters(self,):
-#         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
-#         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
-
-# class sharedMLP(nn.Module):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.W = int(get_width(config))
-#         print(f"hidden_dim: {self.W}")
-#         config.enc_out_dim=self.W
-#         singleagent_context_size = config.seq_len*(config.state_dim + config.num_actions)
-#         self.model = MLP(singleagent_context_size, config.enc_out_dim, config.num_actions)
-
-#     def forward(self,state_seq, actions_seq):
-#         # state_seq: (bsz, seq_len, state_dim)
-#         # actions_seq: (bsz, seq_len, num_agents, num_actions)
-#         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-#         action_logits = []
-#         flattened_context = torch.cat((
-#             torch.unsqueeze(torch.flatten(state_seq,start_dim=1),1).repeat((1,num_agents,1)), #(bsz, num_agents, seq_len*state_dim)
-#             torch.flatten(torch.transpose(actions_seq,1,2),start_dim=2) #(bsz, num_agents, seq_len*num_actions)
-#             ),dim=2).view(batch_size*num_agents,-1) #(bsz*num_agents, seq_len*(state_dim +num_actions))
-#         output=self.model(flattened_context).view(*(batch_size, num_agents, num_actions))
-#         return output
-
-#     def count_parameters(self,):
-#         assert isinstance(self, nn.Module), "model must be a torch.nn.Module"
-#         return sum(p.numel() for p in self.parameters() if p.requires_grad)

@@ -95,6 +95,7 @@ def get_data_and_configs(config):
 
         # make a subdirectory for each run
         hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
+        config.hash=hash_var
         train_dir = os.path.join(save_dir, hash_var)
         if not os.path.exists(train_dir):
             os.makedirs(train_dir)
@@ -126,10 +127,6 @@ def train(config):
         model = STOMP(model_config)
     elif model_config.model_name.split('_')[0]=='MLP':
         model = MLPbaselines(model_config)
-    # elif model_config.model_name =='sharedMLP':
-    #     model = sharedMLP(model_config)
-    # elif model_config.model_name =='MLPallagents':
-    #     model = MLPallagents(model_config)
 
     # log number of parameters
     num_parameters = model.count_parameters()
@@ -139,7 +136,7 @@ def train(config):
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
         f"with modelsize {model_config.P} for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
-
+    
     # wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
     for epoch in range(config.num_epochs):
         st=time.time()
@@ -188,7 +185,7 @@ def train(config):
         f"_batchsize_{config.batch_size}"+\
         f"_lr_{config.learning_rate}"
     print("saving " + training_run_info + " at hash:", flush=True)
-    print(hash_var, flush=True)
+    print(config.hash, flush=True)
 
     # also save config as yaml
     with open(train_dir + "/model_config.yaml", 'w') as file:
@@ -243,13 +240,13 @@ def collect_parameters():
 
     # add model architexture configuration    
     model_config = {'seq_len': seq_len}
-    if False:
+    if True:
         # >STOMP
         model_config['model_name'] = 'STOMP'
         # config['enc_MLPhidden_dim'] = 256
         # config['enc_hidden_dim'] = 256
         # config['enc_out_dim'] = 256
-        if False: # --single-agent baseline
+        if True: # --single-agent baseline
             model_config['cross_talk'] = False
             model_config['decoder_type'] = 'MLP'
         else: # --multi-agent baseline
@@ -260,11 +257,11 @@ def collect_parameters():
         # >illustrative baselines
         # config['enc_out_dim'] = 256
         if False: # unshared
-            model_config['model_name'] = 'MLP_nosharing' #peragent'
+            model_config['model_name'] = 'MLP_nosharing'
         elif True: # shared
-            model_config['model_name'] = 'MLP_fullsharing' #sharedMLP
+            model_config['model_name'] = 'MLP_fullsharing' 
         elif False: # 1 network 
-            model_config['model_name'] = 'MLP_encodersharingonly' #allagents
+            model_config['model_name'] = 'MLP_encodersharingonly'
         model_config['cross_talk'] = None
         model_config['decoder_type'] = None
     train_config['model_config'] = model_config
@@ -287,7 +284,7 @@ if __name__ == "__main__":
 
     # training parameters (set as needed)
     num_epochs = 50
-    learning_rate = 5e-5
+    learning_rate = 5e-4
     batch_size = 8
     data_seed = 0
     seed = 0
