@@ -31,7 +31,7 @@ parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 
 # Training parameters
-parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
+parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
 parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
@@ -156,14 +156,15 @@ def train(config):
         model = MLPbaselines(model_config)
 
     # log number of parameters
-    model_config.actualP = model.count_parameters()
-    print(f"number of parameters: {model_config.actualP} (rel. est. error: {(config.P - model_config.actualP)/model_config.actualP:.4f})", flush=True)
+    model_config.Pactual = model.count_parameters()
+    print(f"number of parameters: {model_config.Pactual} (rel. est. error: {(config.P - model_config.Pactual)/model_config.Pactual:.4f})", flush=True)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
-        f"with modelsize {model_config.P} for {config.num_epochs} epochs " +\
+        f"with modelsize {model_config.Pactual} for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
 
-    # wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
+    wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
+    locally_logged =[]
     for epoch in range(config.num_epochs):
         st=time.time()
         train_epoch_loss, train_epoch_accuracy = eval_performance(
@@ -178,40 +179,34 @@ def train(config):
             f"took {int(time.time()-st)} s"
         )
 
-        {
-        # wandb.log({
-        #     "epoch": epoch,
-        #     "train_loss": train_epoch_loss,
-        #     "train_accuracy": train_epoch_accuracy,
-        #     "test_loss": test_epoch_loss,
-        #     "test_accuracy": test_epoch_accuracy
-        # })
-        }
-
-        # Append the data to the DataFrame
-        new_row = pd.DataFrame({
-            "corr":[data_config['corr']],
+        epoch_data = {
+            "corr":[data_config.corr],
             "state_dim": [model_config.state_dim],
             "num_actions": [model_config.num_actions],
-            "num_train_samples":[data_config.num_train_samples]
-            "num_test_samples":[data_config.num_test_samples]
+            "num_train_samples":[data_config.num_train_samples],
+            "num_test_samples":[data_config.num_test_samples],
             "num_agents": [data_config.num_agents],
             "data_seed": [config.data_seed],
             "data_hash": [config.data_dir],
+            "model_name": [model_config.model_name],
+            "decoder_type": [model_config.decoder_type],
             "P": [model_config.P],
             "model_size": [model_config.Pactual],
             "decoder_type": [model_config.decoder_type],
             "seq_len": [model_config.seq_len],
-            "learning_rate": [train_config.learning_rate],
-            "batch_size": [train_config.batch_size],
+            "learning_rate": [config.learning_rate],
+            "batch_size": [config.batch_size],
             "epoch": [epoch],
             "train_loss": [train_epoch_loss],
             "train_accuracy": [train_epoch_accuracy],
             "test_loss": [test_epoch_loss],
             "test_accuracy": [test_epoch_accuracy]
-        }, index=[0])
-        df = pd.concat([df, new_row], ignore_index=True) if epoch>0 else new_row
-    # wandb.finish()
+        }
+
+        locally_logged.append(epoch_data)
+        wandb.log(epoch_data)
+    df = pd.DataFrame(locally_logged)
+    wandb.finish()
 
     training_run_info = \
         f"_{model_config.model_name}"+\
