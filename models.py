@@ -110,29 +110,29 @@ class BufferAttentionDecoder():
     def __init__(self, config):
         super().__init__()
         self.bufferoutput_dim = (config.num_agents, config.num_actions)
-        self.context_history = None
+        self.latent_history = None
         self.joint_action_history = None
-        self.current_context_batch = 0
+        self.current_latent_batch = 0
 
     def append_to_buffer(self, target_actions):
-        self.context_history = self.current_context_batch.detach().clone() if self.context_history is None else torch.cat(
-            (self.context_history, self.current_context_batch.detach().clone()), dim=0)  # history_size x hidden_size
+        self.latent_history = self.current_latent_batch.detach().clone() if self.latent_history is None else torch.cat(
+            (self.latent_history, self.current_latent_batch.detach().clone()), dim=0)  # history_size x hidden_size
         action_onehots_batch = torch.nn.functional.one_hot(target_actions.detach().clone(),
                                                            num_classes=self.bufferoutput_dim[1]).float()
         self.joint_action_history = action_onehots_batch if self.joint_action_history is None else torch.cat([
             self.joint_action_history, action_onehots_batch], dim=0)  # history_size x num_ground_agents x action_dim
 
-    def forward(self, context_samples):
-        batch_size, num_agents, enc_dim = context_samples.shape
-        self.current_context_batch = context_samples # batch_size x num_ground_agents x enc_dim
-        if self.context_history == None:
+    def forward(self, latent_avg_samples):
+        batch_size, enc_dim = latent_avg_samples.shape
+        self.current_latent_batch = latent_avg_samples # batch_size x enc_dim
+        if self.latent_history == None:
             predicted_joint_actions = F.softmax(torch.ones(
                 (batch_size, self.bufferoutput_dim[0], self.bufferoutput_dim[1])),dim=-1)
         else:
             predicted_joint_actions = []
             for i in range(batch_size):
                 attention_weights = F.softmax(torch.matmul(
-                    self.context_history, self.current_context_batch[i]), dim=-1)  # history_size
+                    self.latent_history, self.current_latent_batch[i]), dim=-1)  # history_size
                 abs_predicted_joint_action = torch.matmul(self.joint_action_history.permute(
                     -2, -1, 0), attention_weights)  # num_ground_agents x action_dim
                 predicted_joint_actions.append(

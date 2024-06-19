@@ -8,8 +8,12 @@ from types import SimpleNamespace
 import os
 import hashlib
 import time
-from utils import numpy_scalar_to_python
 import numpy as np
+
+def numpy_scalar_to_python(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
 def load_data(data_dir, data_seed=0):
     data_filename = f"{data_dir}/data.h5"

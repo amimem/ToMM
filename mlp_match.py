@@ -129,14 +129,13 @@ def train(config):
         model = MLPbaselines(model_config)
 
     # log number of parameters
-    num_parameters = model.count_parameters()
-    print(f"number of parameters: {num_parameters} (rel. est. error: {(config.P - num_parameters)/num_parameters:.4f})", flush=True)
-
+    model_config.actualP = model.count_parameters()
+    print(f"number of parameters: {model_config.actualP} (rel. est. error: {(config.P - model_config.actualP)/model_config.actualP:.4f})", flush=True)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
         f"with modelsize {model_config.P} for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
-    
+
     # wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
     for epoch in range(config.num_epochs):
         st=time.time()
@@ -161,18 +160,25 @@ def train(config):
 
         # Append the data to the DataFrame
         new_row = pd.DataFrame({
-            "data_hash": [config.data_dir],
-            "num_agents": [model_config.num_agents],
+            "corr":[data_config['corr']],
             "state_dim": [model_config.state_dim],
             "num_actions": [model_config.num_actions],
+            "num_train_samples":[data_config.num_train_samples]
+            "num_test_samples":[data_config.num_test_samples]
+            "num_agents": [data_config.num_agents],
+            "data_seed": [config.data_seed],
+            "data_hash": [config.data_dir],
+            "P": [model_config.P],
+            "model_size": [model_config.Pactual],
             "decoder_type": [model_config.decoder_type],
             "seq_len": [model_config.seq_len],
+            "learning_rate": [train_config.learning_rate],
+            "batch_size": [train_config.batch_size],
             "epoch": [epoch],
             "train_loss": [train_epoch_loss],
             "train_accuracy": [train_epoch_accuracy],
             "test_loss": [test_epoch_loss],
-            "test_accuracy": [test_epoch_accuracy],
-            "data_seed": [config.data_seed]
+            "test_accuracy": [test_epoch_accuracy]
         }, index=[0])
         df = pd.concat([df, new_row], ignore_index=True) if epoch>0 else new_row
     # wandb.finish()
@@ -188,12 +194,12 @@ def train(config):
     print(config.hash, flush=True)
 
     # also save config as yaml
-    with open(train_dir + "/model_config.yaml", 'w') as file:
-        yaml.dump(model_config, file)
+    with open(train_dir + "/train_config.yaml", 'w') as file:
+        yaml.dump(config, file)
 
     torch.save(model.state_dict(), train_dir + "/state_dict_final.pt")
 
-    df.to_csv(train_dir + "results.csv", index=False)
+    df.to_csv(train_dir + "/results.csv", index=False)
 
     return train_dir
 
@@ -204,11 +210,7 @@ def get_context_distinguishability_data(config):
     contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions, check_duplicates=True)
     return contextualized_train_data.number_of_contexts_with_duplicates
 
-def collect_parameters():
-
-    #----------------------------------
-    set_seed(seed)
-    #----------------------------------
+def collect_parameters_and_gen_data():
 
     #generate correlation-controlled (s,a)-tuple data
     dataset_config = {
@@ -250,7 +252,7 @@ def collect_parameters():
             model_config['cross_talk'] = False
             model_config['decoder_type'] = 'MLP'
         else: # --multi-agent baseline
-            model_config['cross_talk'] = True
+            model_config['cross_talk'] = False
             model_config['decoder_type'] = 'BuffAtt'
             # config['dec_hidden_dim'] = 256
     else:
@@ -273,9 +275,9 @@ if __name__ == "__main__":
 
     # experiment parameters
     N = 10 # num agents. [10,100,1000]
-    corr = 0 # pairwise correlation in data generated from logit model. [0, 0.5, .99]
+    corr = 0.8 # pairwise correlation in data generated from logit model. [0, 0.5, .99]
     P = int(5e5) # training model size. big enough such that hidden width not too small? 
-    seq_len = 8 # context length. adjust based on distinguishability of contexts
+    seq_len = 16 # context length. adjust based on distinguishability of contexts
     training_sample_budget = int(1e4)
 
     # fixed training data properties
@@ -290,9 +292,14 @@ if __name__ == "__main__":
     seed = 0
     evaluation_sample_size = int(1e4) # large enough for low variability of test accuracy across data_seeds
 
-    dataset_config,train_config=collect_parameters()
+    dataset_config,train_config=collect_parameters_and_gen_data()
     
+    #----------------------------------
+    set_seed(seed) # 
+    #----------------------------------
+
     if False: #distinguishability analysis
+
         Nvec=[10,100]
         svec=[4,8,12,16,20]
         corrvec=[0,0.3,0.6,0.9,1.0]
