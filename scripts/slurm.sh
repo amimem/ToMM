@@ -8,7 +8,7 @@
 #SBATCH -o ./scratch/slurm_out/slurm-%j-%a.out
 #SBATCH -e ./scratch/slurm_out/slurm-%j-%a.err
 
-## SBATCH --array=0-31
+# SBATCH --array=0-31
 
 module load python/3.10.lua
 module load cudatoolkit/12.3.2
@@ -39,13 +39,13 @@ export WANDB_DIR=$SCRATCH/wandb
 # scratch/output/data_330fb6f722 # 100
 # scratch/output/data_45dd5039c4 # 1000
 # scratch/output/data_2a6573283c # 10000
-python beta/mlp.py
-python beta/vq_mlp.py
+# python beta/mlp.py
+# python beta/vq_mlp.py
 
-# echo "Starting task $SLURM_ARRAY_TASK_ID"
-# command=$(sed -n "${SLURM_ARRAY_TASK_ID}p" $HOME/abstraction/scripts/commands.txt)
-# eval_command=$(eval echo $command)
-# srun $eval_command
+echo "Starting task $SLURM_ARRAY_TASK_ID"
+command=$(sed -n "${SLURM_ARRAY_TASK_ID}p" $HOME/abstraction/scripts/commands.txt)
+eval_command=$(eval echo $command)
+srun $eval_command
 
 #$SLURM_TMPDIR/data
 # cp -R $SLURM_TMPDIR/ ~/scratch/

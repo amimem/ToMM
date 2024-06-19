@@ -37,30 +37,32 @@ class ContextDataset(Dataset):
         states = data["states"]
         actions = data["actions"]
 
-        if False:
-            num_samples=len(states)
-            self.states = np.empty((num_samples, seq_len, states.shape[1]))
-            self.actions = np.empty((num_samples, seq_len, actions.shape[1]))
+       
+        """
+        num_samples=len(states)
+        self.states = np.empty((num_samples, seq_len, states.shape[1]))
+        self.actions = np.empty((num_samples, seq_len, actions.shape[1]))
 
-            mask=np.ones(num_samples,dtype=bool)
-            index_list = np.arange(num_samples) 
-            for state_id in index_list:
-                mask[state_id] = False
-                indices_for_context=np.random.choice(index_list[mask],size=seq_len-1,replace=False)
-                self.states[state_id]=np.vstack([states[indices_for_context],states[state_id]])
-                self.actions[state_id]=np.vstack([actions[indices_for_context],actions[state_id]])
-                mask[state_id] = True
-            self.states = torch.from_numpy(self.states).float()# num_seqs, seq_len, state_dim
-            self.actions = torch.from_numpy(self.actions).long()# num_seqs, seq_len, num_agents
-        else:
-            self.states = [
-                torch.tensor(states[i:i+seq_len]).float()
-                for i in range(len(states) - seq_len)]
-            self.actions = [
-                torch.tensor(actions[i:i+seq_len]).long()
-                for i in range(len(actions) - seq_len)]
-            self.states = torch.stack(self.states)# num_seqs, seq_len, state_dim
-            self.actions = torch.stack(self.actions)# num_seqs, seq_len, num_agents
+        mask=np.ones(num_samples,dtype=bool)
+        index_list = np.arange(num_samples) 
+        for state_id in index_list:
+            mask[state_id] = False
+            indices_for_context=np.random.choice(index_list[mask],size=seq_len-1,replace=False)
+            self.states[state_id]=np.vstack([states[indices_for_context],states[state_id]])
+            self.actions[state_id]=np.vstack([actions[indices_for_context],actions[state_id]])
+            mask[state_id] = True
+        self.states = torch.from_numpy(self.states).float()# num_seqs, seq_len, state_dim
+        self.actions = torch.from_numpy(self.actions).long()# num_seqs, seq_len, num_agents
+        """
+        
+        self.states = [
+            torch.tensor(states[i:i+seq_len]).float()
+            for i in range(len(states) - seq_len)]
+        self.actions = [
+            torch.tensor(actions[i:i+seq_len]).long()
+            for i in range(len(actions) - seq_len)]
+        self.states = torch.stack(self.states)# num_seqs, seq_len, state_dim
+        self.actions = torch.stack(self.actions)# num_seqs, seq_len, num_agents
 
         if check_duplicates:
             print('Checking duplicates: ')
@@ -79,14 +81,34 @@ class ContextDataset(Dataset):
                         continue
                     break
             self.number_of_contexts_with_duplicates =int(torch.sum(has_context_duplicates))
-            print()
-            print(f'{self.states.shape[:2]} shaped contexts with {self.number_of_contexts_with_duplicates} duplicates')
+            print(f'\n{self.states.shape[:2]} shaped contexts with {self.number_of_contexts_with_duplicates} duplicates')
 
         self.seq_len = seq_len
         self.num_actions = num_actions
         self.state_dim = states.shape[1]
         self.num_agents = actions.shape[1]
 
+    def check_duplicates(self):
+        print('Checking duplicates: ')
+        # Initialize tensor to track duplicates
+        has_context_duplicates = torch.zeros(len(self.states), dtype=torch.bool)
+        # Transpose actions for easier comparison
+        tmpacts = self.actions.transpose(1, 2)
+        # Iterate over each state
+        for i in range(len(self.actions)):
+            if i % 1000 == 0:
+                print(f"{int((i / len(self.actions)) * 100)}%", end="\r")
+            # Use broadcasting to compare each agent's actions with every other agent's actions in a vectorized manner
+            comparisons = tmpacts[i].unsqueeze(1) == tmpacts[i].unsqueeze(0)
+            # Sum over the action dimension to find complete matches, and then check for any matches across agents
+            complete_matches = comparisons.all(dim=2).sum(dim=0) > 1
+            # If any complete matches are found, mark this state as having duplicates
+            if complete_matches.any():
+                has_context_duplicates[i] = True
+
+        self.number_of_contexts_with_duplicates = int(torch.sum(has_context_duplicates))
+        print(f'\n{self.states.shape[:2]} shaped contexts with {self.number_of_contexts_with_duplicates} duplicates')
+        
     def __len__(self):
         return len(self.states)
 
@@ -105,7 +127,7 @@ class ContextDataset(Dataset):
         return states, action_onehots_seq, target_actions
 
 
-def generate_dataset_from_logitmodel(config):
+def gen_logit_dataset(config):
 
     datasets = {}
     data_seed_list = range(2)

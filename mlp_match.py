@@ -7,13 +7,40 @@ import torch
 import wandb
 import time
 import hashlib
+import argparse
 import os
 import yaml
 from types import SimpleNamespace
 
 # import custom functions
 from models import STOMP, MLPbaselines
-from data_utils import load_data, ContextDataset, generate_dataset_from_logitmodel
+from data_utils import load_data, gen_logit_dataset, ContextDataset
+
+# Create the parser
+parser = argparse.ArgumentParser(description='Experiment parameters')
+
+# Add arguments
+parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
+parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
+parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
+parser.add_argument('--seq_len', type=int, default=8, help='context length.')
+parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
+
+# Fixed training data properties
+parser.add_argument('--S', type=int, default=8, help='state space dimension')
+parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
+
+# Training parameters
+parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
+parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
+parser.add_argument('--batch_size', type=int, default=8, help='batch size')
+parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
+parser.add_argument('--seed', type=int, default=0, help='seed for random number generators')
+parser.add_argument('--evaluation_sample_size', type=int, default=int(1e4), help='sample size for evaluation')
+
+# Parse the arguments
+args = parser.parse_args()
+
 
 # get slurm job array index
 try:
@@ -21,7 +48,6 @@ try:
 except:
     job_id = -1
     print("Not running on a cluster")
-
 
 # sets the seed for generating random numbers
 def set_seed(seed):
@@ -32,7 +58,7 @@ def set_seed(seed):
 
 
 # iterates over dataset, evaluating model response and optionally updating parameters
-def eval_perf(model, dataloader, and_train=False, optimizer=None):
+def eval_performance(model, dataloader, and_train=False, optimizer=None):
     if and_train:
         model.train()
     else:
@@ -104,6 +130,7 @@ def get_data_and_configs(config):
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         wandb_run_name = str(hash_var) + "_" + str(timestamp)
         print("wandb run name: " + wandb_run_name, flush=True)
+        config.hash = hash_var
 
         return train_data, test_data, data_config, model_config, config, train_dir
 
@@ -140,9 +167,9 @@ def train(config):
     # wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
     for epoch in range(config.num_epochs):
         st=time.time()
-        train_epoch_loss, train_epoch_accuracy = eval_perf(
+        train_epoch_loss, train_epoch_accuracy = eval_performance(
             model, train_dataloader, and_train=True, optimizer=optimizer)
-        test_epoch_loss, test_epoch_accuracy = eval_perf(
+        test_epoch_loss, test_epoch_accuracy = eval_performance(
             model, test_dataloader)
 
         print(
@@ -151,6 +178,8 @@ def train(config):
             f"Accuracy: {train_epoch_accuracy:.4f}/{test_epoch_accuracy:.4f}, " +
             f"took {int(time.time()-st)} s"
         )
+
+        {
         # wandb.log({
         #     "epoch": epoch,
         #     "train_loss": train_epoch_loss,
@@ -158,6 +187,7 @@ def train(config):
         #     "test_loss": test_epoch_loss,
         #     "test_accuracy": test_epoch_accuracy
         # })
+        }
 
         # Append the data to the DataFrame
         new_row = pd.DataFrame({
@@ -207,39 +237,38 @@ def get_context_distinguishability_data(config):
 def collect_parameters():
 
     #----------------------------------
-    set_seed(seed)
+    set_seed(args.seed)
     #----------------------------------
 
     #generate correlation-controlled (s,a)-tuple data
     dataset_config = {
-        "num_train_samples": training_sample_budget,
-        "num_test_samples": evaluation_sample_size,
+        "num_train_samples": args.training_sample_budget,
+        "num_test_samples": args.evaluation_sample_size,
         "outdir" : "output/",
-        "num_actions":A,
-        "num_agents": N,
-        "state_dim": S,
+        "num_actions": args.A,
+        "num_agents": args.N,
+        "state_dim": args.S,
         "model_name":"logit",
-        "corr": corr
+        "corr": args.corr
     }
 
-    data_dir=generate_dataset_from_logitmodel(dataset_config)
+    data_dir=gen_logit_dataset(dataset_config)
 
     #----------------------------------
-
     # training configuration for (s,a) block data
     train_config = {
-        'P': P,
-        'num_epochs': num_epochs,
-        'learning_rate': learning_rate,
-        'batch_size': batch_size,
+        'P': args.P,
+        'num_epochs': args.num_epochs,
+        'learning_rate': args.learning_rate,
+        'batch_size': args.batch_size,
         'data_dir': data_dir,
-        'data_seed': data_seed,
+        'data_seed': args.data_seed,
         'outdir': 'output/',
-        'seed': seed
+        'seed': args.seed
         }
 
     # add model architexture configuration    
-    model_config = {'seq_len': seq_len}
+    model_config = {'seq_len': args.seq_len}
     if True:
         # >STOMP
         model_config['model_name'] = 'STOMP'
@@ -253,7 +282,7 @@ def collect_parameters():
             model_config['cross_talk'] = True
             model_config['decoder_type'] = 'BuffAtt'
             # config['dec_hidden_dim'] = 256
-    else:
+    '''
         # >illustrative baselines
         # config['enc_out_dim'] = 256
         if False: # unshared
@@ -264,6 +293,8 @@ def collect_parameters():
             model_config['model_name'] = 'MLP_encodersharingonly'
         model_config['cross_talk'] = None
         model_config['decoder_type'] = None
+    '''
+
     train_config['model_config'] = model_config
 
     return dataset_config,train_config
@@ -271,28 +302,11 @@ def collect_parameters():
 
 if __name__ == "__main__":
 
-    # experiment parameters
-    N = 10 # num agents. [10,100,1000]
-    corr = 0 # pairwise correlation in data generated from logit model. [0, 0.5, .99]
-    P = int(5e5) # training model size. big enough such that hidden width not too small? 
-    seq_len = 8 # context length. adjust based on distinguishability of contexts
-    training_sample_budget = int(1e4)
-
-    # fixed training data properties
-    S = 8 # state space dim 8 gives 2^8=256 distinct observations in ground system policy, big enough even for largest N?
-    A = 2 # single-agent action space dim
-
-    # training parameters (set as needed)
-    num_epochs = 50
-    learning_rate = 5e-4
-    batch_size = 8
-    data_seed = 0
-    seed = 0
-    evaluation_sample_size = int(1e4) # large enough for low variability of test accuracy across data_seeds
-
+    #----------------------------------
     dataset_config,train_config=collect_parameters()
     
-    if False: #distinguishability analysis
+    """
+        #distinguishability analysis
         Nvec=[10,100]
         svec=[4,8,12,16,20]
         corrvec=[0,0.3,0.6,0.9,1.0]
@@ -310,6 +324,8 @@ if __name__ == "__main__":
         df=pd.DataFrame(count_data,columns=['N','seqlen','corr','count'])
         file_name = 'distinguishability_df.csv'
         df.to_csv(file_name,index=False)
-    else: #training experiment
-        store_name = train(train_config)
-        print(f'finished. output stored at: {store_name}')
+    """
+
+    #training experiment
+    store_name = train(train_config)
+    print(f'finished. output stored at: {store_name}')
