@@ -31,7 +31,7 @@ parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 
 # Training parameters
-parser.add_argument('--num_epochs', type=int, default=1, help='number of epochs')
+parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
 parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
@@ -48,6 +48,9 @@ try:
 except:
     job_id = -1
     print("Not running on a cluster")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Running on {device}")
 
 # sets the seed for generating random numbers
 def set_seed(seed):
@@ -72,7 +75,7 @@ def eval_performance(model, dataloader, and_train=False, optimizer=None):
         # state_seq: (batch_size, seq_len, state_dim)
         # action_seqs: (batch_size, seq_len, num_agents, num_actions)
         # target actions: (bsz, num_agents)
-        action_logit_vectors = model(state_seq, action_seqs)
+        action_logit_vectors = model(state_seq.to(device), action_seqs.to(device))
 
         if hasattr(model, "decoder_type"):
             if model.decoder_type == 'BuffAtt' and batch_step==0:
@@ -108,7 +111,11 @@ def get_data_and_configs(config):
         model_config = SimpleNamespace(**config['model_config'])
         config = SimpleNamespace(**config)
         print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}")
-
+        
+        model_config.num_actions = data_config.num_actions
+        model_config.num_agents = data_config.num_agents
+        model_config.state_dim = data_config.state_dim
+        model_config.P = config.P
 
         # make a directory for saving the results
         save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
@@ -126,17 +133,31 @@ def get_data_and_configs(config):
         if not os.path.exists(train_dir):
             os.makedirs(train_dir)
 
-        # initialize wandb
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        wandb_run_name = str(hash_var) + "_" + str(timestamp)
-        print("wandb run name: " + wandb_run_name, flush=True)
         config.hash = hash_var
 
-        return train_data, test_data, data_config, model_config, config, train_dir
+        run_dict = {
+            "corr": data_config.corr,
+            "state_dim": data_config.state_dim,
+            "num_actions": model_config.num_actions,
+            "num_train_samples":data_config.num_train_samples,
+            "num_test_samples":data_config.num_test_samples,
+            "num_agents": data_config.num_agents,
+            "data_seed": config.data_seed,
+            "data_hash": config.data_dir,
+            "model_name": model_config.model_name,
+            "decoder_type": model_config.decoder_type,
+            "P": model_config.P,
+            "decoder_type": model_config.decoder_type,
+            "seq_len": model_config.seq_len,
+            "learning_rate": config.learning_rate,
+            "batch_size": config.batch_size
+        }
+
+        return train_data, test_data, data_config, model_config, config, run_dict, train_dir
 
 def train(config):
 
-    train_dataset, test_dataset, data_config, model_config, config, train_dir = get_data_and_configs(config)
+    train_dataset, test_dataset, data_config, model_config, config, run_dict, train_dir = get_data_and_configs(config)
     
     contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions)
     contextualized_test_data = ContextDataset(test_dataset, model_config.seq_len, data_config.num_actions)
@@ -144,26 +165,26 @@ def train(config):
         contextualized_train_data, batch_size=config.batch_size, shuffle=True)
     test_dataloader = DataLoader(
         contextualized_test_data, batch_size=config.batch_size, shuffle=False)
-    
-    model_config.num_actions = train_dataloader.dataset.num_actions
-    model_config.num_agents = train_dataloader.dataset.num_agents
-    model_config.state_dim = train_dataloader.dataset.state_dim
-    model_config.P = config.P
  
     if model_config.model_name=='STOMP':
-        model = STOMP(model_config)
+        model = STOMP(model_config).to(device)
     elif model_config.model_name.split('_')[0]=='MLP':
-        model = MLPbaselines(model_config)
+        model = MLPbaselines(model_config).to(device)
 
     # log number of parameters
     model_config.Pactual = model.count_parameters()
+    run_dict['Pactual'] = model_config.Pactual
     print(f"number of parameters: {model_config.Pactual} (rel. est. error: {(config.P - model_config.Pactual)/model_config.Pactual:.4f})", flush=True)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
         f"with modelsize {model_config.Pactual} for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
 
-    wandb.init(project="ToMM", group="archcompare",job_type=None, config=vars(config))
+    # initialize wandb
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    wandb_run_name = str(config.hash) + "_" + str(timestamp)
+    print("wandb run name: " + wandb_run_name, flush=True)
+    run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict)
     locally_logged =[]
     for epoch in range(config.num_epochs):
         st=time.time()
@@ -178,33 +199,16 @@ def train(config):
             f"Accuracy: {train_epoch_accuracy:.4f}/{test_epoch_accuracy:.4f}, " +
             f"took {int(time.time()-st)} s"
         )
-
         epoch_data = {
-            "corr":[data_config.corr],
-            "state_dim": [model_config.state_dim],
-            "num_actions": [model_config.num_actions],
-            "num_train_samples":[data_config.num_train_samples],
-            "num_test_samples":[data_config.num_test_samples],
-            "num_agents": [data_config.num_agents],
-            "data_seed": [config.data_seed],
-            "data_hash": [config.data_dir],
-            "model_name": [model_config.model_name],
-            "decoder_type": [model_config.decoder_type],
-            "P": [model_config.P],
-            "model_size": [model_config.Pactual],
-            "decoder_type": [model_config.decoder_type],
-            "seq_len": [model_config.seq_len],
-            "learning_rate": [config.learning_rate],
-            "batch_size": [config.batch_size],
-            "epoch": [epoch],
-            "train_loss": [train_epoch_loss],
-            "train_accuracy": [train_epoch_accuracy],
-            "test_loss": [test_epoch_loss],
-            "test_accuracy": [test_epoch_accuracy]
+            "epoch": epoch,
+            "train_loss": train_epoch_loss,
+            "train_accuracy": train_epoch_accuracy,
+            "test_loss": test_epoch_loss,
+            "test_accuracy": test_epoch_accuracy
         }
+        run.log(epoch_data)
+        locally_logged.append(epoch_data.update(run_dict))
 
-        locally_logged.append(epoch_data)
-        wandb.log(epoch_data)
     df = pd.DataFrame(locally_logged)
     wandb.finish()
 
@@ -230,7 +234,7 @@ def train(config):
 
 def get_context_distinguishability_data(config):
 
-    train_dataset, test_dataset, data_config, model_config, config, train_dir = get_data_and_configs(config)
+    train_dataset, test_dataset, data_config, model_config, config, run_config, train_dir = get_data_and_configs(config)
     
     contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions, check_duplicates=True)
     return contextualized_train_data.number_of_contexts_with_duplicates
