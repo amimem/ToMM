@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
 parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
-parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
+parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=8, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
@@ -201,9 +201,9 @@ def train(config):
         )
         epoch_data = {
             "epoch": epoch,
-            "train_loss": train_epoch_loss,
+            "train_loss_per_agent": train_epoch_loss/data_config.num_agents,
             "train_accuracy": train_epoch_accuracy,
-            "test_loss": test_epoch_loss,
+            "test_loss_per_agent": test_epoch_loss/data_config.num_agents,
             "test_accuracy": test_epoch_accuracy
         }
         run.log(epoch_data)
@@ -281,7 +281,7 @@ def collect_parameters_and_gen_data():
         # config['enc_hidden_dim'] = 256
         # config['enc_out_dim'] = 256
         if True: # --single-agent baseline
-            model_config['cross_talk'] = False
+            model_config['cross_talk'] = True
             model_config['decoder_type'] = 'MLP'
         else: # --multi-agent baseline
             model_config['cross_talk'] = False

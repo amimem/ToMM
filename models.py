@@ -79,8 +79,8 @@ class SeqEnc(nn.Module):
         # output_seq = []
         for step in range(seq_len):
             hx, cx = self.seq_stepmodel_time(input_seq[step], (hx, cx))
-            # if self.cross_talk:
-            #     hx = hx + self.attn(hx)
+            if self.cross_talk:
+                hx = hx + self.attn(hx)
             # output_seq.append(hx.view((batch_size, num_agents, self.enc_hidden_dim)))
         # output_seq = torch.transpose(torch.stack(output_seq, dim=0), 0, 1) # batch_size, seq_len, num_agents, enc_hidden_dim
         # output = hx.view((batch_size, num_agents, self.enc_hidden_dim))
