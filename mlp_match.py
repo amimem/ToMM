@@ -20,8 +20,8 @@ from data_utils import load_data, gen_logit_dataset, ContextDataset
 parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
-parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
-parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
+parser.add_argument('--N', type=int, default=100, help='num agents. [10,100,1000]')
+parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=8, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
@@ -32,7 +32,7 @@ parser.add_argument('--A', type=int, default=2, help='single-agent action space 
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
-parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
+parser.add_argument('--learning_rate', type=float, default=5e-5, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
 parser.add_argument('--seed', type=int, default=0, help='seed for random number generators')
@@ -61,7 +61,7 @@ def set_seed(seed):
 
 
 # iterates over dataset, evaluating model response and optionally updating parameters
-def eval_performance(model, dataloader, and_train=False, optimizer=None):
+def eval_performance(model, dataloader, and_train=False, optimizer=None, agent_subset_fraction=0.1):
     if and_train:
         model.train()
     else:
@@ -90,6 +90,7 @@ def eval_performance(model, dataloader, and_train=False, optimizer=None):
             criterion(
                 action_logit_vectors[:, agent_idx, :], target_actions[:, agent_idx])
             for agent_idx in range(dataloader.dataset.num_agents)
+            # for agent_idx in torch.randperm(dataloader.dataset.num_agents)[:int(agent_subset_fraction*dataloader.dataset.num_agents)]
         )
 
         if and_train:
@@ -177,14 +178,14 @@ def train(config):
     print(f"number of parameters: {model_config.Pactual} (rel. est. error: {(config.P - model_config.Pactual)/model_config.Pactual:.4f})", flush=True)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
-        f"with modelsize {model_config.Pactual} for {config.num_epochs} epochs " +\
+        f"with modelsize {model_config.Pactual} on length-{model_config.seq_len} data for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
 
     # initialize wandb
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     wandb_run_name = str(config.hash) + "_" + str(timestamp)
     print("wandb run name: " + wandb_run_name, flush=True)
-    run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict)
+    # run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict)
     locally_logged =[]
     for epoch in range(config.num_epochs):
         st=time.time()
@@ -206,11 +207,11 @@ def train(config):
             "test_loss_per_agent": test_epoch_loss/data_config.num_agents,
             "test_accuracy": test_epoch_accuracy
         }
-        run.log(epoch_data)
+        # run.log(epoch_data)
         locally_logged.append(epoch_data.update(run_dict))
 
     df = pd.DataFrame(locally_logged)
-    wandb.finish()
+    # wandb.finish()
 
     training_run_info = \
         f"_{model_config.model_name}"+\
