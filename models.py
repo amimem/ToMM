@@ -66,7 +66,7 @@ class SeqEnc(nn.Module):
             nn.Linear(self.enc_hidden_dim, self.d)
         ])
         self.num_inducing_points = 10
-        self.ips = nn.Embedding(num_embeddings=self.num_inducing_points, embedding_dim=self.d)
+        self.ips = nn.Embedding(num_embeddings=self.num_inducing_points, embedding_dim=self.d_I)
 
         # self.fc_out = nn.Linear(self.enc_hidden_dim,config.enc_out_dim)
 
