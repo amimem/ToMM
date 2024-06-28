@@ -20,7 +20,7 @@ from data_utils import load_data, gen_logit_dataset, ContextDataset
 parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
-parser.add_argument('--N', type=int, default=100, help='num agents. [10,100,1000]')
+parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
 parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=8, help='context length.')
@@ -32,7 +32,7 @@ parser.add_argument('--A', type=int, default=2, help='single-agent action space 
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
-parser.add_argument('--learning_rate', type=float, default=5e-5, help='learning rate')
+parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
 parser.add_argument('--seed', type=int, default=0, help='seed for random number generators')

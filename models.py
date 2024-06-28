@@ -48,44 +48,54 @@ class SeqEnc(nn.Module):
         super().__init__()
         self.enc_hidden_dim = config.enc_hidden_dim
         self.cross_talk = cross_talk
-
         self.fc_in = MLP(config.state_dim+config.num_actions,config.enc_MLPhidden_dim,self.enc_hidden_dim)
 
         #modules for sequence model
         self.LSTM = nn.LSTM(self.enc_hidden_dim, self.enc_hidden_dim)
         #modules for interaction model
-        self.crosstalk_key = nn.Linear(self.enc_hidden_dim, self.enc_hidden_dim)
-        self.crosstalk_query = nn.Linear(self.enc_hidden_dim, self.enc_hidden_dim)
-        self.crosstalk_value = nn.Linear(self.enc_hidden_dim, self.enc_hidden_dim)
+        self.d = self.enc_hidden_dim
+        self.d_I = self.enc_hidden_dim
+        self.attn_fcs1 = nn.ModuleList([
+            nn.Linear(self.d_I, self.d),
+            nn.Linear(self.enc_hidden_dim, self.d),
+            nn.Linear(self.enc_hidden_dim, self.d)
+        ])
+        self.attn_fcs2 = nn.ModuleList([
+            nn.Linear(self.d_I, self.d),
+            nn.Linear(self.enc_hidden_dim, self.d),
+            nn.Linear(self.enc_hidden_dim, self.d)
+        ])
+        self.num_inducing_points = 10
+        self.ips = nn.Embedding(num_embeddings=self.num_inducing_points, embedding_dim=self.d)
 
         # self.fc_out = nn.Linear(self.enc_hidden_dim,config.enc_out_dim)
 
-
     def sequence_model(self, x):
-        # print(x.shape)
         _, (h_final, _) = self.LSTM(x)
-        # print(h_final[0].shape)
         return h_final[0]
 
 
     def agent_interaction_model(self, x):
-        return self.attn(x)
+        batch_size = x.shape[0]
+        # # attention (quadratic compute in num agents)
+        # return self.attn(x,x)
+        # inducing point attention (linear compute in num agents)
+        return self.attn(x,self.attn(self.ips.weight.repeat((batch_size,1,1)),x,self.attn_fcs1),self.attn_fcs2) # TODO: replace repeat with more efficient broadcasting
 
-
-    def attn(self, x):
-        Q = self.crosstalk_query(x)
-        K = self.crosstalk_key(x)
-        V = self.crosstalk_value(x)
-        return F.softmax(Q @ K.transpose(-1,-2)/np.sqrt(self.enc_hidden_dim),dim=-1) @ V
+    def attn(self, x, y, fcs):
+        Q = fcs[0](x)
+        K = fcs[1](y)
+        V = fcs[2](y)
+        return F.softmax(Q @ K.transpose(-1,-2)/np.sqrt(self.d),dim=-1) @ V
 
 
     def forward(self, state_seq, actions_seq):
 
         #reshape and concatentate states and actions
         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
-        batch_size, seq_len, state_dim = state_seq.shape
+        # batch_size, seq_len, state_dim = state_seq.shape
         state_seq = torch.unsqueeze(state_seq, 2).repeat((1, 1, num_agents, 1))
-        batch_size, seq_len, num_agents, state_dim = state_seq.shape
+        # batch_size, seq_len, num_agents, state_dim = state_seq.shape
         x = torch.transpose(
             torch.cat([state_seq, actions_seq], dim=-1), 0, 1).flatten(1, 2)
         # seq_len, batch_size*num_agents, state_dim + num_actions
@@ -94,45 +104,10 @@ class SeqEnc(nn.Module):
         x = self.fc_in(x) # seq_len, batch_size*num_agents, enc_hidden_dim
         x = self.sequence_model(x) # batch_size*num_agents, enc_hidden_dim
         if self.cross_talk:
-            x = self.agent_interaction_model(x.view((batch_size, num_agents, self.enc_hidden_dim))) # batch_size, num_agents, enc_hidden_dim
+            x = self.agent_interaction_model(x.view((batch_size, num_agents, self.enc_hidden_dim)))
         # x = self.fc_out(x) # batch_size, num_agents, enc_out_dim
 
         return x
-
-
-        # self.seq_stepmodel_time = nn.LSTMCell(
-        #     self.enc_hidden_dim, self.enc_hidden_dim)
-        # self.seq_model_agent = nn.LSTM(
-        #     self.enc_hidden_dim, int(self.enc_hidden_dim/2), batch_first=True,bidirectional=True)
-        # if self.cross_talk:
-
-        # hx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)
-        # cx = torch.randn(batch_size*num_agents, self.enc_hidden_dim)        
-        # output_seq = []
-        # for step in range(seq_len):
-        #     hx, cx = self.seq_stepmodel_time(input_seq[step], (hx, cx))
-            # if self.cross_talk:
-            #     hx = hx + self.attn(hx)
-            # output_seq.append(hx.view((batch_size, num_agents, self.enc_hidden_dim)))
-        # output_seq = torch.transpose(torch.stack(output_seq, dim=0), 0, 1) # batch_size, seq_len, num_agents, enc_hidden_dim
-        # output = hx.view((batch_size, num_agents, self.enc_hidden_dim))
-
-        # num_agents, batch_Size
-        # if self.cross_talk:
-        #     hx = hx + self.attn(hx)
-        # o_block = hx.view((batch_size, num_agents, self.enc_hidden_dim))
-        # hx = torch.randn(2, batch_size, int(self.enc_hidden_dim/2))
-        # cx = torch.randn(2, batch_size, int(self.enc_hidden_dim/2))      
-        # encoded_contexts, _ = self.seq_model_agent(o_block, (hx, cx))
-        # (batch_size, num_agents, self.enc_hidden_dim)
-        # encoded_contexts = self.seq_model_agent(o_block)
-
-
-        # TODO: Block process, e.g. Transformer
-
-        # output_seq = self.fc_out(output_seq) # batch_size, seq_len, num_agents, enc_out_dim
-        # encoded_contexts = torch.mean(output_seq,dim=1)  # (bsz, num_agents, enc_out_dim)
-        # return encoded_contexts 
 
 
 class BufferAttentionDecoder():
