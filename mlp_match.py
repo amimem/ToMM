@@ -13,17 +13,17 @@ import yaml
 from types import SimpleNamespace
 
 # import custom functions
-from models import STOMP, MLPbaselines
+from models import STOMP, MLPbaselines #, load_model
 from data_utils import load_data, gen_logit_dataset, ContextDataset
 
 # Create the parser
 parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
-parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
+parser.add_argument('--N', type=int, default=100, help='num agents. [10,100,1000]')
 parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
-parser.add_argument('--seq_len', type=int, default=8, help='context length.')
+parser.add_argument('--seq_len', type=int, default=16, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
 
 # Fixed training data properties
@@ -169,8 +169,12 @@ def train(config):
  
     if model_config.model_name=='STOMP':
         model = STOMP(model_config).to(device)
+        if False:
+            model.load_state_dict(torch.load(train_dir + "/state_dict_final.pt")) #hard-coded model loading of same run. TODO: turn into function and option
     elif model_config.model_name.split('_')[0]=='MLP':
         model = MLPbaselines(model_config).to(device)
+    else:
+        model = load_model(model_config,train_dir)
 
     # log number of parameters
     model_config.Pactual = model.count_parameters()
@@ -185,7 +189,7 @@ def train(config):
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     wandb_run_name = str(config.hash) + "_" + str(timestamp)
     print("wandb run name: " + wandb_run_name, flush=True)
-    # run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict)
+    run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict)
     locally_logged =[]
     for epoch in range(config.num_epochs):
         st=time.time()
@@ -207,11 +211,11 @@ def train(config):
             "test_loss_per_agent": test_epoch_loss/data_config.num_agents,
             "test_accuracy": test_epoch_accuracy
         }
-        # run.log(epoch_data)
+        run.log(epoch_data)
         locally_logged.append(epoch_data.update(run_dict))
 
     df = pd.DataFrame(locally_logged)
-    # wandb.finish()
+    wandb.finish()
 
     training_run_info = \
         f"_{model_config.model_name}"+\
@@ -282,7 +286,7 @@ def collect_parameters_and_gen_data():
         # config['enc_hidden_dim'] = 256
         # config['enc_out_dim'] = 256
         if True: # --single-agent baseline
-            model_config['cross_talk'] = True
+            model_config['cross_talk'] = False
             model_config['decoder_type'] = 'MLP'
         else: # --multi-agent baseline
             model_config['cross_talk'] = False

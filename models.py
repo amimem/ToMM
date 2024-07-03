@@ -77,9 +77,9 @@ class SeqEnc(nn.Module):
 
     def agent_interaction_model(self, x):
         batch_size = x.shape[0]
-        # # attention (quadratic compute in num agents)
+        # # attention (compute is quadratic in num agents)
         # return self.attn(x,x)
-        # inducing point attention (linear compute in num agents)
+        # inducing point attention (compute is linear in num agents)
         return self.attn(x,self.attn(self.ips.weight.repeat((batch_size,1,1)),x,self.attn_fcs1),self.attn_fcs2) # TODO: replace repeat with more efficient broadcasting
 
     def attn(self, x, y, fcs):
@@ -97,14 +97,14 @@ class SeqEnc(nn.Module):
         state_seq = torch.unsqueeze(state_seq, 2).repeat((1, 1, num_agents, 1))
         # batch_size, seq_len, num_agents, state_dim = state_seq.shape
         x = torch.transpose(
-            torch.cat([state_seq, actions_seq], dim=-1), 0, 1).flatten(1, 2)
-        # seq_len, batch_size*num_agents, state_dim + num_actions
+            torch.cat([state_seq, actions_seq], dim=-1), 0, 1)
+        # seq_len, batch_size, num_agents, state_dim + num_actions
         
         #process
-        x = self.fc_in(x) # seq_len, batch_size*num_agents, enc_hidden_dim
-        x = self.sequence_model(x) # batch_size*num_agents, enc_hidden_dim
+        x = self.fc_in(x.flatten(1, 2)) # seq_len, batch_size*num_agents, enc_hidden_dim
+        x = self.sequence_model(x).view((batch_size, num_agents, self.enc_hidden_dim)) # batch_size,num_agents, enc_hidden_dim
         if self.cross_talk:
-            x = self.agent_interaction_model(x.view((batch_size, num_agents, self.enc_hidden_dim)))
+            x = self.agent_interaction_model()
         # x = self.fc_out(x) # batch_size, num_agents, enc_out_dim
 
         return x

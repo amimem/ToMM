@@ -202,3 +202,8 @@ def save_dataset_from_model(config, datasets):
         yaml.dump(attrs_dict, yaml_file)
 
     return output_filename
+
+    # def load_model(model_config, train_dir):
+    #     model = STOMP(model_config).to(device)
+    #     model.load_state_dict(torch.load(train_dir + "/state_dict_final.pt"))
+    #     return model
