@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser(description='Experiment parameters')
 parser.add_argument('--N', type=int, default=100, help='num agents. [10,100,1000]')
 parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
-parser.add_argument('--seq_len', type=int, default=16, help='context length.')
+parser.add_argument('--seq_len', type=int, default=32, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
 
 # Fixed training data properties
@@ -31,7 +31,7 @@ parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 
 # Training parameters
-parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
+parser.add_argument('--num_epochs', type=int, default=150, help='number of epochs')
 parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
@@ -148,13 +148,27 @@ def get_data_and_configs(config):
             "model_name": model_config.model_name,
             "decoder_type": model_config.decoder_type,
             "P": model_config.P,
-            "decoder_type": model_config.decoder_type,
+            "inter_model_type": model_config.inter_model_type,
             "seq_len": model_config.seq_len,
             "learning_rate": config.learning_rate,
             "batch_size": config.batch_size
         }
 
         return train_data, test_data, data_config, model_config, config, run_dict, train_dir
+
+def get_grad_norms(model,model_config):
+    #store grad norms of each module
+    enc_grads, dec_grads = [], []
+    for name, param in model.named_parameters():
+        if param.requires_grad and param.grad is not None:
+            if 'seq_enc' in name:
+                enc_grads.append(param.grad.detach().flatten())
+            elif 'decoder' in name:
+                dec_grads.append(param.grad.detach().flatten())
+    enc_gradnorm = torch.cat(enc_grads).norm()
+
+    dec_gradnorm = torch.cat(dec_grads).norm() if model_config.decoder_type == 'MLP' else None
+    return enc_gradnorm, dec_gradnorm
 
 def train(config):
 
@@ -187,14 +201,20 @@ def train(config):
 
     # initialize wandb
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    wandb_run_name = str(config.hash) + "_" + str(timestamp)
-    print("wandb run name: " + wandb_run_name, flush=True)
-    run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict)
+    wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
+        ['N','P','l','c','lr','im','dt'],
+        ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type']
+        )])
+    run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict, name=wandb_run_name+'fcout_pe_ip')#,resume='allow')
+    # wandb.watch(model,log='all',log_freq=1)
+
     locally_logged =[]
     for epoch in range(config.num_epochs):
         st=time.time()
         train_epoch_loss, train_epoch_accuracy = eval_performance(
             model, train_dataloader, and_train=True, optimizer=optimizer)
+        enc_gradnorm, dec_gradnorm = get_grad_norms(model, model_config)
+
         test_epoch_loss, test_epoch_accuracy = eval_performance(
             model, test_dataloader)
 
@@ -209,7 +229,9 @@ def train(config):
             "train_loss_per_agent": train_epoch_loss/data_config.num_agents,
             "train_accuracy": train_epoch_accuracy,
             "test_loss_per_agent": test_epoch_loss/data_config.num_agents,
-            "test_accuracy": test_epoch_accuracy
+            "test_accuracy": test_epoch_accuracy,
+            "enc_gradnorm": enc_gradnorm,
+            "dec_gradnorm": dec_gradnorm,
         }
         run.log(epoch_data)
         locally_logged.append(epoch_data.update(run_dict))
@@ -282,16 +304,17 @@ def collect_parameters_and_gen_data():
     if True:
         # >STOMP
         model_config['model_name'] = 'STOMP'
-        # config['enc_MLPhidden_dim'] = 256
-        # config['enc_hidden_dim'] = 256
-        # config['enc_out_dim'] = 256
-        if True: # --single-agent baseline
-            model_config['cross_talk'] = False
-            model_config['decoder_type'] = 'MLP'
-        else: # --multi-agent baseline
-            model_config['cross_talk'] = False
-            model_config['decoder_type'] = 'BuffAtt'
-            # config['dec_hidden_dim'] = 256
+        
+        # model_config['inter_model_type'] = None
+        # model_config['inter_model_type'] = 'rnn'
+        model_config['inter_model_type'] = 'attn'
+        model_config['inter_model_type'] = 'ipattn'
+        # model_config['inter_model_type'] = 'SAB'
+        # model_config['inter_model_type'] = 'ISAB'
+        
+        model_config['decoder_type'] = 'MLP'
+        # model_config['decoder_type'] = 'BuffAtt'
+    
     '''
         # >illustrative baselines
         # config['enc_out_dim'] = 256
