@@ -8,7 +8,7 @@
 #SBATCH -o ./scratch/slurm_out/slurm-%j-%a.out
 #SBATCH -e ./scratch/slurm_out/slurm-%j-%a.err
 
-#SBATCH --array=0-31 # should match lines in commands.txt
+#SBATCH --array=0-7 # should match lines in commands.txt
 
 module load python/3.10.lua
 module load cudatoolkit/12.3.2

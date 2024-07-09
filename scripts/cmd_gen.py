@@ -5,7 +5,7 @@ paras = {
     "N": [10, 100],
     "corr": [0, 0.8],
     "P": [int(5e5), int(5e6)],  # Assuming only one value as per the excerpt
-    "seq_len": [16],  # Assuming only one value as per the excerpt
+    "seq_len": [32],  # Assuming only one value as per the excerpt
     "training_sample_budget": [int(1e4)],  # Assuming only one value as per the excerpt
     "batch_size": [8],  # Assuming only one value as per the excerpt
     "num_epochs": [100],  # Assuming only one value as per the excerpt

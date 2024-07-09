@@ -88,7 +88,7 @@ def eval_performance(model, dataloader, and_train=False, optimizer=None, agent_s
 
         loss = sum(
             criterion(
-                action_logit_vectors[:, agent_idx, :], target_actions[:, agent_idx])
+                action_logit_vectors[:, agent_idx, :], target_actions[:, agent_idx].to(device))
             for agent_idx in range(dataloader.dataset.num_agents)
             # for agent_idx in torch.randperm(dataloader.dataset.num_agents)[:int(agent_subset_fraction*dataloader.dataset.num_agents)]
         )
@@ -98,7 +98,7 @@ def eval_performance(model, dataloader, and_train=False, optimizer=None, agent_s
             optimizer.step()
 
         accuracy = (torch.argmax(action_logit_vectors, dim=-1)
-                    == target_actions).float().mean().item()
+                    == target_actions.to(device)).float().mean().item()
         batch_loss.append(loss.item())
         batch_accuracy.append(accuracy)
 
@@ -165,9 +165,9 @@ def get_grad_norms(model,model_config):
                 enc_grads.append(param.grad.detach().flatten())
             elif 'decoder' in name:
                 dec_grads.append(param.grad.detach().flatten())
-    enc_gradnorm = torch.cat(enc_grads).norm()
+    enc_gradnorm = torch.cat(enc_grads).norm()/model_config.num_agents  
 
-    dec_gradnorm = torch.cat(dec_grads).norm() if model_config.decoder_type == 'MLP' else None
+    dec_gradnorm = torch.cat(dec_grads).norm()/model_config.num_agents if model_config.decoder_type == 'MLP' else None
     return enc_gradnorm, dec_gradnorm
 
 def train(config):

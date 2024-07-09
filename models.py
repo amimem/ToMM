@@ -165,7 +165,7 @@ class SeqEnc(nn.Module):
         pe = torch.zeros(length, d_model)
         position = torch.arange(0, length).unsqueeze(1)
         div_term = torch.exp((torch.arange(0, d_model, 2, dtype=torch.float) *
-                             -(math.log(10000.0) / d_model)))
+                             -(torch.log(torch.tensor(10000.0)) / d_model)))
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
 
@@ -279,8 +279,8 @@ def get_width(v):
     n_layers = 2
     if v.model_name == 'STOMP':
         # if v.decoder_type == 'MLP' and v.cross_talk:
-        a = 17
-        b = v.seq_len*(v.num_actions+v.state_dim)+4*v.num_actions
+        a = (2*n_layers+1+8+3+1) #17
+        b = (v.num_actions+v.state_dim)+4+v.num_actions
         c = -v.P
         W = solve_quadratic(a, b, c)
         # elif v.decoder_type != 'BuffAtt' and v.cross_talk:
