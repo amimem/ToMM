@@ -103,7 +103,6 @@ class SeqEnc(nn.Module):
 
     def agent_interaction_model(self, x):
         batch_size = x.shape[0] #batch_size, num_agents, enc_hidden_dim
-        x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
 
         if self.inter_model_type == 'attn':
             # attention (compute is quadratic in num agents)
@@ -146,6 +145,7 @@ class SeqEnc(nn.Module):
         #process
         x = self.fc_in(x.flatten(1, 2)) # seq_len, batch_size*num_agents, enc_hidden_dim
         x = self.sequence_model(x).view((batch_size, num_agents, self.enc_hidden_dim)) # batch_size,num_agents, enc_hidden_dim
+        x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
         if self.inter_model_type is not None:
             x = self.agent_interaction_model(x)
         # x = self.fc_out(x) # batch_size, num_agents, enc_out_dim
@@ -280,6 +280,8 @@ def get_width(v):
     if v.model_name == 'STOMP':
         # if v.decoder_type == 'MLP' and v.cross_talk:
         a = (2*n_layers+1+8+3+1) #17
+        if v.inter_model_type==None:
+            a = a - 3
         b = (v.num_actions+v.state_dim)+4+v.num_actions
         c = -v.P
         W = solve_quadratic(a, b, c)
@@ -319,6 +321,8 @@ def get_width(v):
     minimum_capacity = 2
     if W<minimum_capacity:
         W=minimum_capacity
+    if (W%2)!=0:
+        W = W+1
     return W
 #------------------data generation models
 

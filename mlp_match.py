@@ -11,7 +11,8 @@ import argparse
 import os
 import yaml
 from types import SimpleNamespace
-
+from functools import partial
+from scipy.optimize import bisect
 # import custom functions
 from models import STOMP, MLPbaselines #, load_model
 from data_utils import load_data, gen_logit_dataset, ContextDataset
@@ -20,10 +21,10 @@ from data_utils import load_data, gen_logit_dataset, ContextDataset
 parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
-parser.add_argument('--N', type=int, default=100, help='num agents. [10,100,1000]')
+parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
 parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
-parser.add_argument('--seq_len', type=int, default=32, help='context length.')
+parser.add_argument('--seq_len', type=int, default=16, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
 
 # Fixed training data properties
@@ -31,7 +32,7 @@ parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 
 # Training parameters
-parser.add_argument('--num_epochs', type=int, default=150, help='number of epochs')
+parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
 parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
@@ -61,13 +62,11 @@ def set_seed(seed):
 
 
 # iterates over dataset, evaluating model response and optionally updating parameters
-def eval_performance(model, dataloader, and_train=False, optimizer=None, agent_subset_fraction=0.1):
+def eval_performance(model, dataloader, and_train=False, optimizer=None, criterion=None, agent_subset_fraction=0.1):
     if and_train:
         model.train()
     else:
         model.eval()
-
-    criterion = nn.CrossEntropyLoss()
 
     batch_loss = []
     batch_accuracy = []
@@ -109,7 +108,7 @@ def get_data_and_configs(config):
         data_dir = config['outdir'] + config['data_dir']
         train_data, test_data, data_config = load_data(data_dir,data_seed=config['data_seed'])
         data_config = SimpleNamespace(**data_config['file_attrs'])
-        model_config = SimpleNamespace(**config['model_config'])
+        model_config = SimpleNamespace(**config['model_settings'])
         config = SimpleNamespace(**config)
         print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}")
         
@@ -145,6 +144,7 @@ def get_data_and_configs(config):
             "num_agents": data_config.num_agents,
             "data_seed": config.data_seed,
             "data_hash": config.data_dir,
+            "hash": config.hash,
             "model_name": model_config.model_name,
             "decoder_type": model_config.decoder_type,
             "P": model_config.P,
@@ -156,24 +156,81 @@ def get_data_and_configs(config):
 
         return train_data, test_data, data_config, model_config, config, run_dict, train_dir
 
-def get_grad_norms(model,model_config):
+def get_grad_norms(model, model_config):
     #store grad norms of each module
-    enc_grads, dec_grads = [], []
+    module_name_list = ['seq_enc.fc_in', 'seq_enc.LSTM', 'seq_enc.attn', 'decoder.model']
+    module_gradnorms = {name:[] for name in module_name_list}
+    all_gradnorms = {}
     for name, param in model.named_parameters():
         if param.requires_grad and param.grad is not None:
-            if 'seq_enc' in name:
-                enc_grads.append(param.grad.detach().flatten())
-            elif 'decoder' in name:
-                dec_grads.append(param.grad.detach().flatten())
-    enc_gradnorm = torch.cat(enc_grads).norm()/model_config.num_agents  
+            grad = param.grad.detach().flatten()
+            all_gradnorms[name]=torch.linalg.vector_norm(grad).numpy()/len(grad)
+            for mit, module_name in enumerate(module_name_list):
+                if module_name in name:
+                    module_gradnorms[module_name].append(all_gradnorms[name])
+    for mit, module_name in enumerate(module_name_list):
+        module_gradnorms[module_name] = np.mean(module_gradnorms[module_name])
+    return module_gradnorms, all_gradnorms
 
-    dec_gradnorm = torch.cat(dec_grads).norm()/model_config.num_agents if model_config.decoder_type == 'MLP' else None
-    return enc_gradnorm, dec_gradnorm
+def get_avg_loss_over_batch(learning_rate, optimizer, model, dataloader, criterion, device,num_test_batches):
+    for g in optimizer.param_groups:
+        g['lr'] = learning_rate
+    delta_loss_batch = []
+    for batch_step, (state_seq, action_seqs, target_actions) in enumerate(dataloader):
+        action_logit_vectors = model(state_seq.to(device), action_seqs.to(device))
+        loss = sum(
+            criterion(
+                action_logit_vectors[:, agent_idx, :], target_actions[:, agent_idx].to(device)
+            ) for agent_idx in range(dataloader.dataset.num_agents)
+        )
+        pre_loss = loss.item()
+        
+        loss.backward()
+        optimizer.step()
+        
+        action_logit_vectors = model(state_seq.to(device), action_seqs.to(device))
+        loss = sum(
+            criterion(
+                action_logit_vectors[:, agent_idx, :], target_actions[:, agent_idx].to(device)
+            ) for agent_idx in range(dataloader.dataset.num_agents)
+        )
+        post_loss = loss.item()
+        
+        delta_loss_batch.append(post_loss - pre_loss)
+        
+        if batch_step > num_test_batches:
+            break
+    return sum(delta_loss_batch)/num_test_batches
+
+def find_lr(optimizer, model, dataloader, criterion, device=device):
+    # find learning rate
+    min_lr,max_lr = 0.00001, 0.001
+    num_lr_values = 10
+    num_test_batches = 20
+    learning_rates = np.logspace(np.log10(min_lr),np.log10(max_lr), num_lr_values)
+    get_loss_fn = partial(get_avg_loss_over_batch, optimizer=optimizer, model=model, dataloader=dataloader, criterion=criterion, device=device, num_test_batches=num_test_batches)
+
+    # grid search
+    delta_loss = [get_loss_fn(learning_rate) for learning_rate in learning_rates]
+    opt_learning_rate = learning_rates[np.argmin(delta_loss)]
+    print(opt_learning_rate)
+    
+    # polish
+    iterations = 5
+    start_width_factor = 4
+    low, high = opt_learning_rate/start_width_factor, opt_learning_rate*start_width_factor 
+    opt_learning_rate=bisect(get_loss_fn, low, high, maxiter=iterations, full_output=False, disp=False)
+
+    # for g in optimizer.param_groups:
+    #     g['lr'] = opt_learning_rate
+
+    return opt_learning_rate
 
 def train(config):
 
     train_dataset, test_dataset, data_config, model_config, config, run_dict, train_dir = get_data_and_configs(config)
-    
+
+    # data
     contextualized_train_data = ContextDataset(train_dataset, model_config.seq_len, data_config.num_actions)
     contextualized_test_data = ContextDataset(test_dataset, model_config.seq_len, data_config.num_actions)
     train_dataloader = DataLoader(
@@ -181,6 +238,7 @@ def train(config):
     test_dataloader = DataLoader(
         contextualized_test_data, batch_size=config.batch_size, shuffle=False)
  
+    # model
     if model_config.model_name=='STOMP':
         model = STOMP(model_config).to(device)
         if False:
@@ -189,12 +247,23 @@ def train(config):
         model = MLPbaselines(model_config).to(device)
     else:
         model = load_model(model_config,train_dir)
+    
+    # optimizer
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    
+    # loss
+    criterion = nn.CrossEntropyLoss()
 
-    # log number of parameters
+    # pretraining hyper-parameter tuning
+    config.learning_rate = find_lr(optimizer, model, train_dataloader, criterion)
+    # reinitialize to be safe.
+    model = STOMP(model_config).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+
+    # logging number of parameters
     model_config.Pactual = model.count_parameters()
     run_dict['Pactual'] = model_config.Pactual
     print(f"number of parameters: {model_config.Pactual} (rel. est. error: {(config.P - model_config.Pactual)/model_config.Pactual:.4f})", flush=True)
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     print(f"seed {config.seed} training of {model_config.model_name} model " +\
         f"with modelsize {model_config.Pactual} on length-{model_config.seq_len} data for {config.num_epochs} epochs " +\
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
@@ -205,18 +274,20 @@ def train(config):
         ['N','P','l','c','lr','im','dt'],
         ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type']
         )])
-    run=wandb.init(project="ToMMM", group="archcompare",job_type=None, config=run_dict, name=wandb_run_name+'fcout_pe_ip')#,resume='allow')
+    run=wandb.init(project="ToMMM", group="postICML",job_type=None, config=run_dict, name=wandb_run_name+'test')#,resume='allow')
     # wandb.watch(model,log='all',log_freq=1)
 
+
+    # train
     locally_logged =[]
     for epoch in range(config.num_epochs):
         st=time.time()
         train_epoch_loss, train_epoch_accuracy = eval_performance(
-            model, train_dataloader, and_train=True, optimizer=optimizer)
-        enc_gradnorm, dec_gradnorm = get_grad_norms(model, model_config)
+            model, train_dataloader, and_train=True, optimizer=optimizer, criterion=criterion)
+        module_gradnorms, all_gradnorms = get_grad_norms(model, model_config)
 
         test_epoch_loss, test_epoch_accuracy = eval_performance(
-            model, test_dataloader)
+            model, test_dataloader, optimizer=optimizer, criterion=criterion)
 
         print(
             f"Epoch {epoch+1}/{config.num_epochs}, " +
@@ -226,15 +297,17 @@ def train(config):
         )
         epoch_data = {
             "epoch": epoch,
-            "train_loss_per_agent": train_epoch_loss/data_config.num_agents,
-            "train_accuracy": train_epoch_accuracy,
-            "test_loss_per_agent": test_epoch_loss/data_config.num_agents,
-            "test_accuracy": test_epoch_accuracy,
-            "enc_gradnorm": enc_gradnorm,
-            "dec_gradnorm": dec_gradnorm,
+            "train/loss_per_agent": train_epoch_loss/data_config.num_agents,
+            "train/accuracy": train_epoch_accuracy,
+            "test/loss_per_agent": test_epoch_loss/data_config.num_agents,
+            "test/accuracy": test_epoch_accuracy
         }
+        epoch_data.update(module_gradnorms)
+        all_gradnorms = dict(zip(['allgrads/'+key for key in all_gradnorms.keys()], all_gradnorms.values)) 
+        epoch_data.update(all_gradnorms)
         run.log(epoch_data)
-        locally_logged.append(epoch_data.update(run_dict))
+        epoch_data.update(run_dict)
+        locally_logged.append(epoch_data)
 
     df = pd.DataFrame(locally_logged)
     wandb.finish()
@@ -251,7 +324,9 @@ def train(config):
 
     # also save config as yaml
     with open(train_dir + "/train_config.yaml", 'w') as file:
-        yaml.dump(config, file)
+        yaml.dump(vars(config), file)
+    with open(train_dir + "/model_config.yaml", 'w') as file:
+        yaml.dump(vars(model_config), file)
 
     torch.save(model.state_dict(), train_dir + "/state_dict_final.pt")
 
@@ -300,35 +375,35 @@ def collect_parameters_and_gen_data():
         }
 
     # add model architexture configuration    
-    model_config = {'seq_len': args.seq_len}
+    model_settings = {'seq_len': args.seq_len}
     if True:
         # >STOMP
-        model_config['model_name'] = 'STOMP'
+        model_settings['model_name'] = 'STOMP'
         
         # model_config['inter_model_type'] = None
-        # model_config['inter_model_type'] = 'rnn'
-        model_config['inter_model_type'] = 'attn'
-        model_config['inter_model_type'] = 'ipattn'
-        # model_config['inter_model_type'] = 'SAB'
-        # model_config['inter_model_type'] = 'ISAB'
+        # model_settings['inter_model_type'] = 'rnn'
+        # model_settings['inter_model_type'] = 'attn'
+        model_settings['inter_model_type'] = 'ipattn'
+        # model_settings['inter_model_type'] = 'SAB'
+        # model_settings['inter_model_type'] = 'ISAB'
         
-        model_config['decoder_type'] = 'MLP'
-        # model_config['decoder_type'] = 'BuffAtt'
+        model_settings['decoder_type'] = 'MLP'
+        # model_settings['decoder_type'] = 'BuffAtt'
     
     '''
         # >illustrative baselines
         # config['enc_out_dim'] = 256
         if False: # unshared
-            model_config['model_name'] = 'MLP_nosharing'
+            model_settings['model_name'] = 'MLP_nosharing'
         elif True: # shared
-            model_config['model_name'] = 'MLP_fullsharing' 
+            model_settings['model_name'] = 'MLP_fullsharing' 
         elif False: # 1 network 
-            model_config['model_name'] = 'MLP_encodersharingonly'
-        model_config['cross_talk'] = None
-        model_config['decoder_type'] = None
+            model_settings['model_name'] = 'MLP_encodersharingonly'
+        model_settings['cross_talk'] = None
+        model_settings['decoder_type'] = None
     '''
 
-    train_config['model_config'] = model_config
+    train_config['model_settings'] = model_settings
 
     return dataset_config,train_config
 
@@ -378,7 +453,7 @@ if __name__ == "__main__":
                     dataset_config['corr']=corr
                     data_dir=generate_dataset_from_logitmodel(dataset_config)
                     train_config['data_dir'] =data_dir
-                    train_config['model_config']['seq_len'] = seq_len
+                    train_config['model_settings']['seq_len'] = seq_len
                     count_data.append([N,seq_len,corr,get_context_distinguishability_data(train_config)/training_sample_budget])
         df=pd.DataFrame(count_data,columns=['N','seqlen','corr','count'])
         file_name = 'distinguishability_df.csv'
