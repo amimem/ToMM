@@ -12,7 +12,7 @@ import os
 import yaml
 from types import SimpleNamespace
 from functools import partial
-from scipy.optimize import bisect
+from scipy.optimize import minimize_scalar
 # import custom functions
 from models import STOMP, MLPbaselines #, load_model
 from data_utils import load_data, gen_logit_dataset, ContextDataset
@@ -172,7 +172,7 @@ def get_grad_norms(model, model_config):
         module_gradnorms[module_name] = np.mean(module_gradnorms[module_name])
     return module_gradnorms, all_gradnorms
 
-def get_avg_loss_over_batch(learning_rate, optimizer, model, dataloader, criterion, device,num_test_batches):
+def get_losschange_over_batch(learning_rate, optimizer, model, dataloader, criterion, device,num_test_batches):
     for g in optimizer.param_groups:
         g['lr'] = learning_rate
     delta_loss_batch = []
@@ -208,10 +208,10 @@ def find_lr(optimizer, model, dataloader, criterion, device=device):
     num_lr_values = 10
     num_test_batches = 20
     learning_rates = np.logspace(np.log10(min_lr),np.log10(max_lr), num_lr_values)
-    get_loss_fn = partial(get_avg_loss_over_batch, optimizer=optimizer, model=model, dataloader=dataloader, criterion=criterion, device=device, num_test_batches=num_test_batches)
+    losschange_fn = partial(get_losschange_over_batch, optimizer=optimizer, model=model, dataloader=dataloader, criterion=criterion, device=device, num_test_batches=num_test_batches)
 
     # grid search
-    delta_loss = [get_loss_fn(learning_rate) for learning_rate in learning_rates]
+    delta_loss = [losschange_fn(learning_rate) for learning_rate in learning_rates]
     opt_learning_rate = learning_rates[np.argmin(delta_loss)]
     print(opt_learning_rate)
     
@@ -219,7 +219,7 @@ def find_lr(optimizer, model, dataloader, criterion, device=device):
     iterations = 5
     start_width_factor = 4
     low, high = opt_learning_rate/start_width_factor, opt_learning_rate*start_width_factor 
-    opt_learning_rate=bisect(get_loss_fn, low, high, maxiter=iterations, full_output=False, disp=False)
+    opt_learning_rate=minimize_scalar(losschange_fn, bracket=(low, high), method='Brent', options={"maxiter": iterations}).x
 
     # for g in optimizer.param_groups:
     #     g['lr'] = opt_learning_rate
@@ -256,7 +256,7 @@ def train(config):
 
     # pretraining hyper-parameter tuning
     config.learning_rate = find_lr(optimizer, model, train_dataloader, criterion)
-    # reinitialize to be safe.
+    # reinitialize to be safe (should reset seed?).
     model = STOMP(model_config).to(device)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
@@ -303,7 +303,7 @@ def train(config):
             "test/accuracy": test_epoch_accuracy
         }
         epoch_data.update(module_gradnorms)
-        all_gradnorms = dict(zip(['allgrads/'+key for key in all_gradnorms.keys()], all_gradnorms.values)) 
+        all_gradnorms = dict(zip(['allgrads/'+key for key in all_gradnorms.keys()], all_gradnorms.values())) 
         epoch_data.update(all_gradnorms)
         run.log(epoch_data)
         epoch_data.update(run_dict)
