@@ -160,8 +160,39 @@ def gen_logit_dataset(config):
 
     return data_hash
 
+# def gen_logit_dataset(config):
+
+#     datasets = {}
+#     data_seed_list = range(2)
+#     for ix, data_seed in enumerate(data_seed_list):
+#         print(f"running seed {data_seed} of {len(data_seed_list)}")
+#         rng = np.random.default_rng(seed=data_seed)
+
+#         model=logit(SimpleNamespace(**config),rng)
+#         for label in ['train','test']:
+#             states=sample_states(config[f'num_{label}_samples'],config['state_dim'],rng)
+#             actions= []
+#             for state in states:
+#                 action_probability_vectors = model.forward(state)
+#                 actions.append(np.argmax(action_probability_vectors, axis=-1))
+#             actions = np.vstack(actions)
+#             # save data
+#             shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
+#             datasets[f"{label}_dataset_{data_seed}"] = { 
+#                 "data_seed": data_seed, 
+#                 "states": states[shuffled_inds], 
+#                 "actions": actions[shuffled_inds],
+#                 "preferred_actions": model.action_at_corr1
+#                 }
+
+#     data_hash=save_dataset_from_model(config, datasets)
+
+    return data_hash
+
 def sample_states(num_samples,state_dim,rng):
-    states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
+    # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
+    states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
+
     return states
 
 def save_dataset_from_model(config, datasets):

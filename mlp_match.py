@@ -10,6 +10,7 @@ import hashlib
 import argparse
 import os
 import yaml
+import copy
 from types import SimpleNamespace
 from functools import partial
 from scipy.optimize import minimize_scalar
@@ -172,10 +173,10 @@ def get_grad_norms(model, model_config):
         module_gradnorms[module_name] = np.mean(module_gradnorms[module_name])
     return module_gradnorms, all_gradnorms
 
-def get_losschange_over_batch(learning_rate, optimizer, model, dataloader, criterion, device,num_test_batches):
-    for g in optimizer.param_groups:
-        g['lr'] = learning_rate
+def get_losschange_over_batch(learning_rate, model, orig_paras, dataloader, criterion, device,num_test_batches):
     delta_loss_batch = []
+    model.load_state_dict(orig_paras)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     for batch_step, (state_seq, action_seqs, target_actions) in enumerate(dataloader):
         action_logit_vectors = model(state_seq.to(device), action_seqs.to(device))
         loss = sum(
@@ -195,34 +196,36 @@ def get_losschange_over_batch(learning_rate, optimizer, model, dataloader, crite
             ) for agent_idx in range(dataloader.dataset.num_agents)
         )
         post_loss = loss.item()
-        
         delta_loss_batch.append(post_loss - pre_loss)
-        
+        # print(f"{pre_loss} {post_loss}")
+
         if batch_step > num_test_batches:
             break
+
     return sum(delta_loss_batch)/num_test_batches
 
 def find_lr(optimizer, model, dataloader, criterion, device=device):
     # find learning rate
-    min_lr,max_lr = 0.00001, 0.001
+    min_lr,max_lr = 0.00001, 0.01
     num_lr_values = 10
-    num_test_batches = 20
+    num_test_batches = 50
     learning_rates = np.logspace(np.log10(min_lr),np.log10(max_lr), num_lr_values)
-    losschange_fn = partial(get_losschange_over_batch, optimizer=optimizer, model=model, dataloader=dataloader, criterion=criterion, device=device, num_test_batches=num_test_batches)
+    orig_state_dict = copy.deepcopy(model.state_dict())
+    losschange_fn = partial(get_losschange_over_batch, model=model, orig_paras=orig_state_dict, dataloader=dataloader, criterion=criterion, device=device, num_test_batches=num_test_batches)
 
     # grid search
     delta_loss = [losschange_fn(learning_rate) for learning_rate in learning_rates]
+    print(delta_loss)
     opt_learning_rate = learning_rates[np.argmin(delta_loss)]
-    print(opt_learning_rate)
-    
-    # polish
-    iterations = 5
-    start_width_factor = 4
-    low, high = opt_learning_rate/start_width_factor, opt_learning_rate*start_width_factor 
-    opt_learning_rate=minimize_scalar(losschange_fn, bracket=(low, high), method='Brent', options={"maxiter": iterations}).x
-
-    # for g in optimizer.param_groups:
-    #     g['lr'] = opt_learning_rate
+    print(f"Is {opt_learning_rate:.5f} in interior of {min_lr:.5f} and {max_lr:.5f}?")
+    if opt_learning_rate > min_lr and opt_learning_rate < max_lr:
+        # polish
+        iterations = 10
+        start_width_factor = 4
+        low, high = opt_learning_rate/start_width_factor, opt_learning_rate*start_width_factor
+        low, high = low if low > min_lr else min_lr, high if high < max_lr else max_lr
+        print(f"{low} {high}")
+        opt_learning_rate=minimize_scalar(losschange_fn, bracket=(low, high), method='Brent', options={"maxiter": iterations}).x
 
     return opt_learning_rate
 
@@ -274,7 +277,7 @@ def train(config):
         ['N','P','l','c','lr','im','dt'],
         ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type']
         )])
-    run=wandb.init(project="ToMMM", group="postICML",job_type=None, config=run_dict, name=wandb_run_name+'test')#,resume='allow')
+    run=wandb.init(project="ToMMM", group="postICMLgsystest",job_type=None, config=run_dict, name=wandb_run_name+'test1state_wo_pe')#,resume='allow')
     # wandb.watch(model,log='all',log_freq=1)
 
 
@@ -380,7 +383,7 @@ def collect_parameters_and_gen_data():
         # >STOMP
         model_settings['model_name'] = 'STOMP'
         
-        # model_config['inter_model_type'] = None
+        # model_settings['inter_model_type'] = None
         # model_settings['inter_model_type'] = 'rnn'
         # model_settings['inter_model_type'] = 'attn'
         model_settings['inter_model_type'] = 'ipattn'

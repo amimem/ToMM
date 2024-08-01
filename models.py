@@ -53,13 +53,14 @@ class SeqEnc(nn.Module):
         #modules for sequence model
         self.LSTM = nn.LSTM(self.enc_hidden_dim, self.enc_hidden_dim)
 
+        self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents)
+
         #modules for interaction model
         self.inter_model_type = inter_model_type
         if inter_model_type is not None:
             self.d = self.enc_hidden_dim
             self.d_I = self.enc_hidden_dim
             self.num_inducing_points = 10
-            self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents)
 
             if self.inter_model_type == 'attn':
                 self.attn_fcs1 = nn.ModuleList([
@@ -85,10 +86,13 @@ class SeqEnc(nn.Module):
                     SAB(self.d, self.d, 1, ln=False)
                 )            
             elif self.inter_model_type == 'ISAB':
-                self.ISAB = ISAB(self.d, self.d, 1, self.num_inducing_points, ln=False)
+                self.ISAB = ISAB(
+                    self.d, self.d, 1, self.num_inducing_points, ln=False
+                )
             elif self.inter_model_type == 'rnn': #biLSTM':
                 self.seq_model_agent = nn.RNN(
-                    self.enc_hidden_dim, int(self.enc_hidden_dim), batch_first=True)
+                    self.enc_hidden_dim, int(self.enc_hidden_dim), batch_first=True
+                )
                     # self.enc_hidden_dim, int(self.enc_hidden_dim/2), batch_first=True,bidirectional=True)
             elif self.inter_model_type is None:
                 pass
@@ -145,7 +149,7 @@ class SeqEnc(nn.Module):
         #process
         x = self.fc_in(x.flatten(1, 2)) # seq_len, batch_size*num_agents, enc_hidden_dim
         x = self.sequence_model(x).view((batch_size, num_agents, self.enc_hidden_dim)) # batch_size,num_agents, enc_hidden_dim
-        x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
+        # x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
         if self.inter_model_type is not None:
             x = self.agent_interaction_model(x)
         # x = self.fc_out(x) # batch_size, num_agents, enc_out_dim
@@ -321,6 +325,7 @@ def get_width(v):
     minimum_capacity = 2
     if W<minimum_capacity:
         W=minimum_capacity
+    W=int(W)
     if (W%2)!=0:
         W = W+1
     return W
@@ -342,10 +347,21 @@ class logit(nn.Module):
         # action 0 logit is same as action at corr=1 logit if action at corr=1 is 0, else it is the negative of action logit at corr=1
         self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
         self.mask = config.num_actions**np.arange(config.state_dim)
+        self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
+
+    # def forward(self, state):
+    #     obs=(state>0) # batch_size, state_dim
+    #     action_0_logits = self.action_0_logits[self.obs2index(obs)]
+    #     return np.vstack([action_0_logits,-action_0_logits]).T
 
     def forward(self, state):
+        # dim(state): batch_size, state_dim
         obs=(state>0) # batch_size, state_dim
-        action_0_logits = self.action_0_logits[self.obs2index(obs)]
+        state_idx = self.obs2index(obs)
+        agent_component = self.action_0_logits[state_idx]
+        state_component = state[self.state_fn[state_idx]]
+        agent_weight_factor = 1
+        action_0_logits = (state_component + agent_weight_factor*agent_component)/np.sqrt(1+agent_weight_factor)
         return np.vstack([action_0_logits,-action_0_logits]).T
 
     def obs2index(self, obs):
