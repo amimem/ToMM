@@ -7,8 +7,8 @@ This repository contains the code from our efforts to formalize a scalable theor
 ## Clone the repository
 
 ```bash
-git clone git@github.com:amimem/abstraction.git
-cd abstraction
+git clone git@github.com:amimem/ToMM.git
+cd ToMM
 ```
 
 ## Install requirements
