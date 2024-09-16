@@ -39,8 +39,6 @@ class Environment:
                         np.sqrt(input_variance_weight/(input_dilution_factor*input_size)))
         nn.init.normal_(self.RNN.weight_hh_l0, std=fluctuation_strength_factor *
                         np.sqrt((1-input_variance_weight)/hidden_size))
-        # nn.init.orthogonal_(self.RNN.weight_ih_l0, gain=fluctuation_strength_factor*np.sqrt(input_variance_weight/(input_dilution_factor*input_size)))
-        # nn.init.orthogonal_(self.RNN.weight_hh_l0, gain=fluctuation_strength_factor*np.sqrt((1-input_variance_weight)/hidden_size))
 
     def step(self, state, actions):
         """

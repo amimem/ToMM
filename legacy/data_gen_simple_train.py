@@ -136,17 +136,6 @@ if __name__ == '__main__':
     np.save(data_filename+".npy",data_store)
     df.to_csv(data_filename, index=False)
 
-
-
-
-
-
-
-
-
-
-
-
     # #train match
     # train_args['model_name']='match'
     # match_train_hashes = []

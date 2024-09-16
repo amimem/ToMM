@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from functools import partial
 from scipy.optimize import minimize_scalar
 # import custom functions
-from models import STOMP, MLPbaselines #, load_model
+from models import STOMP, MLPbaselines
 from data_utils import load_data, gen_logit_dataset, ContextDataset
 
 # Create the parser
@@ -90,7 +90,6 @@ def eval_performance(model, dataloader, and_train=False, optimizer=None, criteri
             criterion(
                 action_logit_vectors[:, agent_idx, :], target_actions[:, agent_idx].to(device))
             for agent_idx in range(dataloader.dataset.num_agents)
-            # for agent_idx in torch.randperm(dataloader.dataset.num_agents)[:int(agent_subset_fraction*dataloader.dataset.num_agents)]
         )
 
         if and_train:
@@ -197,7 +196,6 @@ def get_losschange_over_batch(learning_rate, model, orig_paras, dataloader, crit
         )
         post_loss = loss.item()
         delta_loss_batch.append(post_loss - pre_loss)
-        # print(f"{pre_loss} {post_loss}")
 
         if batch_step > num_test_batches:
             break
@@ -244,12 +242,10 @@ def train(config):
     # model
     if model_config.model_name=='STOMP':
         model = STOMP(model_config).to(device)
-        if False:
-            model.load_state_dict(torch.load(train_dir + "/state_dict_final.pt")) #hard-coded model loading of same run. TODO: turn into function and option
     elif model_config.model_name.split('_')[0]=='MLP':
         model = MLPbaselines(model_config).to(device)
     else:
-        model = load_model(model_config,train_dir)
+        raise ValueError("model name not recognized")
     
     # optimizer
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
@@ -277,8 +273,7 @@ def train(config):
         ['N','P','l','c','lr','im','dt'],
         ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type']
         )])
-    run=wandb.init(project="ToMMM", group="postICMLgsystest",job_type=None, config=run_dict, name=wandb_run_name+'test1state_wo_pe')#,resume='allow')
-    # wandb.watch(model,log='all',log_freq=1)
+    run=wandb.init(project="ToMMM", group="postICMLgsystest",job_type=None, config=run_dict, name=wandb_run_name+'test1state_wo_pe')
 
 
     # train
@@ -346,9 +341,7 @@ def get_context_distinguishability_data(config):
 
 def collect_parameters_and_gen_data():
 
-    #----------------------------------
     set_seed(args.seed)
-    #----------------------------------
 
     #generate correlation-controlled (s,a)-tuple data
     dataset_config = {
@@ -364,7 +357,6 @@ def collect_parameters_and_gen_data():
 
     data_dir=gen_logit_dataset(dataset_config)
 
-    #----------------------------------
     # training configuration for (s,a) block data
     train_config = {
         'P': args.P,
@@ -379,32 +371,15 @@ def collect_parameters_and_gen_data():
 
     # add model architexture configuration    
     model_settings = {'seq_len': args.seq_len}
-    if True:
-        # >STOMP
-        model_settings['model_name'] = 'STOMP'
-        
-        # model_settings['inter_model_type'] = None
-        # model_settings['inter_model_type'] = 'rnn'
-        # model_settings['inter_model_type'] = 'attn'
-        model_settings['inter_model_type'] = 'ipattn'
-        # model_settings['inter_model_type'] = 'SAB'
-        # model_settings['inter_model_type'] = 'ISAB'
-        
-        model_settings['decoder_type'] = 'MLP'
-        # model_settings['decoder_type'] = 'BuffAtt'
-    
-    '''
-        # >illustrative baselines
-        # config['enc_out_dim'] = 256
-        if False: # unshared
-            model_settings['model_name'] = 'MLP_nosharing'
-        elif True: # shared
-            model_settings['model_name'] = 'MLP_fullsharing' 
-        elif False: # 1 network 
-            model_settings['model_name'] = 'MLP_encodersharingonly'
-        model_settings['cross_talk'] = None
-        model_settings['decoder_type'] = None
-    '''
+    model_settings['model_name'] = 'STOMP'
+    # model_settings['inter_model_type'] = None
+    # model_settings['inter_model_type'] = 'rnn'
+    # model_settings['inter_model_type'] = 'attn'
+    model_settings['inter_model_type'] = 'ipattn'
+    # model_settings['inter_model_type'] = 'SAB'
+    # model_settings['inter_model_type'] = 'ISAB'
+    model_settings['decoder_type'] = 'MLP'
+    # model_settings['decoder_type'] = 'BuffAtt'
 
     train_config['model_settings'] = model_settings
 
@@ -413,56 +388,6 @@ def collect_parameters_and_gen_data():
 
 if __name__ == "__main__":
 
-    #----------------------------------
     dataset_config,train_config=collect_parameters_and_gen_data()
-    
-    """
-    # experiment parameters
-    N = 10 # num agents. [10,100,1000]
-    corr = 0.8 # pairwise correlation in data generated from logit model. [0, 0.5, .99]
-    P = int(5e5) # training model size. big enough such that hidden width not too small? 
-    seq_len = 16 # context length. adjust based on distinguishability of contexts
-    training_sample_budget = int(1e4)
-
-    # fixed training data properties
-    S = 8 # state space dim 8 gives 2^8=256 distinct observations in ground system policy, big enough even for largest N?
-    A = 2 # single-agent action space dim
-
-    # training parameters (set as needed)
-    num_epochs = 50
-    learning_rate = 5e-4
-    batch_size = 8
-    data_seed = 0
-    seed = 0
-    evaluation_sample_size = int(1e4) # large enough for low variability of test accuracy across data_seeds
-
-    dataset_config,train_config=collect_parameters_and_gen_data()
-    
-    #----------------------------------
-    set_seed(seed) # 
-    #----------------------------------
-
-    if False: #distinguishability analysis
-
-        Nvec=[10,100]
-        svec=[4,8,12,16,20]
-        corrvec=[0,0.3,0.6,0.9,1.0]
-        count_data=[]
-
-        for nit,N in enumerate(Nvec):
-            for sit,seq_len in enumerate(svec):
-                for cit,corr in enumerate(corrvec):
-                    dataset_config['num_agents']=N
-                    dataset_config['corr']=corr
-                    data_dir=generate_dataset_from_logitmodel(dataset_config)
-                    train_config['data_dir'] =data_dir
-                    train_config['model_settings']['seq_len'] = seq_len
-                    count_data.append([N,seq_len,corr,get_context_distinguishability_data(train_config)/training_sample_budget])
-        df=pd.DataFrame(count_data,columns=['N','seqlen','corr','count'])
-        file_name = 'distinguishability_df.csv'
-        df.to_csv(file_name,index=False)
-    """
-
-    #training experiment
     store_name = train(train_config)
     print(f'finished. output stored at: {store_name}')

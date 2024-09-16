@@ -40,24 +40,6 @@ class ContextDataset(Dataset):
 
         states = data["states"]
         actions = data["actions"]
-
-       
-        """
-        num_samples=len(states)
-        self.states = np.empty((num_samples, seq_len, states.shape[1]))
-        self.actions = np.empty((num_samples, seq_len, actions.shape[1]))
-
-        mask=np.ones(num_samples,dtype=bool)
-        index_list = np.arange(num_samples) 
-        for state_id in index_list:
-            mask[state_id] = False
-            indices_for_context=np.random.choice(index_list[mask],size=seq_len-1,replace=False)
-            self.states[state_id]=np.vstack([states[indices_for_context],states[state_id]])
-            self.actions[state_id]=np.vstack([actions[indices_for_context],actions[state_id]])
-            mask[state_id] = True
-        self.states = torch.from_numpy(self.states).float()# num_seqs, seq_len, state_dim
-        self.actions = torch.from_numpy(self.actions).long()# num_seqs, seq_len, num_agents
-        """
         
         self.states = [
             torch.tensor(states[i:i+seq_len]).float()
@@ -160,35 +142,6 @@ def gen_logit_dataset(config):
 
     return data_hash
 
-# def gen_logit_dataset(config):
-
-#     datasets = {}
-#     data_seed_list = range(2)
-#     for ix, data_seed in enumerate(data_seed_list):
-#         print(f"running seed {data_seed} of {len(data_seed_list)}")
-#         rng = np.random.default_rng(seed=data_seed)
-
-#         model=logit(SimpleNamespace(**config),rng)
-#         for label in ['train','test']:
-#             states=sample_states(config[f'num_{label}_samples'],config['state_dim'],rng)
-#             actions= []
-#             for state in states:
-#                 action_probability_vectors = model.forward(state)
-#                 actions.append(np.argmax(action_probability_vectors, axis=-1))
-#             actions = np.vstack(actions)
-#             # save data
-#             shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
-#             datasets[f"{label}_dataset_{data_seed}"] = { 
-#                 "data_seed": data_seed, 
-#                 "states": states[shuffled_inds], 
-#                 "actions": actions[shuffled_inds],
-#                 "preferred_actions": model.action_at_corr1
-#                 }
-
-#     data_hash=save_dataset_from_model(config, datasets)
-
-    return data_hash
-
 def sample_states(num_samples,state_dim,rng):
     # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
     states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
@@ -233,8 +186,3 @@ def save_dataset_from_model(config, datasets):
         yaml.dump(attrs_dict, yaml_file)
 
     return output_filename
-
-    # def load_model(model_config, train_dir):
-    #     model = STOMP(model_config).to(device)
-    #     model.load_state_dict(torch.load(train_dir + "/state_dict_final.pt"))
-    #     return model

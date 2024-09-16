@@ -289,21 +289,6 @@ def get_width(v):
         b = (v.num_actions+v.state_dim)+4+v.num_actions
         c = -v.P
         W = solve_quadratic(a, b, c)
-        # elif v.decoder_type != 'BuffAtt' and v.cross_talk:
-        #     a = (num_hidden_layers+1)*v.M_model
-        #     b = v.M_model*(v.state_dim)
-        #     c = v.num_agents*v.M_model-v.P
-        #     W = solve_quadratic(a, b, c)
-        # elif ecoder_type == 'BuffAtt' and ~v.cross_talk:
-        #     a = (num_hidden_layers+1)*v.M_model
-        #     b = v.M_model*(v.state_dim)
-        #     c = v.num_agents*v.M_model-v.P
-        #     W = solve_quadratic(a, b, c)
-        # elif v.decoder_type != 'BuffAtt' and ~v.cross_talk:
-        #             a = (num_hidden_layers+1)*v.M_model
-        #     b = v.M_model*(v.state_dim)
-        #     c = v.num_agents*v.M_model-v.P
-        #     W = solve_quadratic(a, b, c)
     elif v.model_name == 'MLP_nosharing':
         a = n_layers
         b = v.state_dim+v.num_actions
@@ -348,11 +333,6 @@ class logit(nn.Module):
         self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
         self.mask = config.num_actions**np.arange(config.state_dim)
         self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
-
-    # def forward(self, state):
-    #     obs=(state>0) # batch_size, state_dim
-    #     action_0_logits = self.action_0_logits[self.obs2index(obs)]
-    #     return np.vstack([action_0_logits,-action_0_logits]).T
 
     def forward(self, state):
         # dim(state): batch_size, state_dim
