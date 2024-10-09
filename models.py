@@ -26,7 +26,6 @@ class STOMP(nn.Module):
         self.seq_enc = SeqEnc(config, inter_model_type=config.inter_model_type) # (bsz,num_agents,seq_len) to (bsz,num_agents,seq_len, enc_dim)
         self.decoder = BufferAttentionDecoder(config) if self.decoder_type == 'BuffAtt' else MLP(
             config.enc_out_dim, config.dec_hidden_dim, config.num_actions)
-
     def forward(self, state_seq, actions_seq):
         # state_seq: (bsz, seq_len, state_dim)
         # actions_seq: (bsz, seq_len, num_agents, num_actions)
@@ -52,7 +51,7 @@ class SeqEnc(nn.Module):
 
         #modules for sequence model
         self.LSTM = nn.LSTM(self.enc_hidden_dim, self.enc_hidden_dim)
-
+        self.use_pos_enc = config.use_pos_enc
         self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents)
 
         #modules for interaction model
@@ -149,7 +148,8 @@ class SeqEnc(nn.Module):
         #process
         x = self.fc_in(x.flatten(1, 2)) # seq_len, batch_size*num_agents, enc_hidden_dim
         x = self.sequence_model(x).view((batch_size, num_agents, self.enc_hidden_dim)) # batch_size,num_agents, enc_hidden_dim
-        # x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
+        if self.use_pos_enc:
+            x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
         if self.inter_model_type is not None:
             x = self.agent_interaction_model(x)
         # x = self.fc_out(x) # batch_size, num_agents, enc_out_dim
@@ -333,6 +333,7 @@ class logit(nn.Module):
         self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
         self.mask = config.num_actions**np.arange(config.state_dim)
         self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
+        self.state_weight_factor = config.state_weight
 
     def forward(self, state):
         # dim(state): batch_size, state_dim
@@ -340,8 +341,8 @@ class logit(nn.Module):
         state_idx = self.obs2index(obs)
         agent_component = self.action_0_logits[state_idx]
         state_component = state[self.state_fn[state_idx]]
-        agent_weight_factor = 1
-        action_0_logits = (state_component + agent_weight_factor*agent_component)/np.sqrt(1+agent_weight_factor)
+        
+        action_0_logits = (self.state_weight_factor*state_component + agent_component)/np.sqrt(self.state_weight_factor+1)
         return np.vstack([action_0_logits,-action_0_logits]).T
 
     def obs2index(self, obs):

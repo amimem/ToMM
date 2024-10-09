@@ -23,14 +23,18 @@ parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
 parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
-parser.add_argument('--corr', type=float, default=0, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
+parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=16, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
+parser.add_argument('--use_pos_enc', type=int, default=1, help='if 1, use positional encodings, else do not')
+parser.add_argument('--inter', type=str, default='None', help='label of interaction model to use (None,attn,ipattn, ...)')
+
 
 # Fixed training data properties
 parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
+parser.add_argument('--wstate', type=float, default=1.0, help='weight of state-dependence')
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
@@ -39,6 +43,7 @@ parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
 parser.add_argument('--seed', type=int, default=0, help='seed for random number generators')
 parser.add_argument('--evaluation_sample_size', type=int, default=int(1e4), help='sample size for evaluation')
+parser.add_argument('--use_wandb', type=int, default=1, help='if 1, log results using wandb, else do not')
 
 # Parse the arguments
 args = parser.parse_args()
@@ -105,56 +110,59 @@ def eval_performance(model, dataloader, and_train=False, optimizer=None, criteri
 
 def get_data_and_configs(config):
 
-        data_dir = config['outdir'] + config['data_dir']
-        train_data, test_data, data_config = load_data(data_dir,data_seed=config['data_seed'])
-        data_config = SimpleNamespace(**data_config['file_attrs'])
-        model_config = SimpleNamespace(**config['model_settings'])
-        config = SimpleNamespace(**config)
-        print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}")
-        
-        model_config.num_actions = data_config.num_actions
-        model_config.num_agents = data_config.num_agents
-        model_config.state_dim = data_config.state_dim
-        model_config.P = config.P
+    data_dir = config['outdir'] + config['data_dir']
+    train_data, test_data, data_config = load_data(data_dir,data_seed=config['data_seed'])
+    data_config = SimpleNamespace(**data_config['file_attrs'])
+    model_config = SimpleNamespace(**config['model_settings'])
+    config = SimpleNamespace(**config)
+    print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}, wstate={data_config.state_weight}")
+    
+    model_config.num_actions = data_config.num_actions
+    model_config.num_agents = data_config.num_agents
+    model_config.state_dim = data_config.state_dim
+    model_config.P = config.P
+    model_config.use_pos_enc = config.use_pos_enc
 
-        # make a directory for saving the results
-        save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+    # make a directory for saving the results
+    save_dir = os.path.join(config.outdir, config.data_dir, 'training_results/')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
-        # hash the arguments except for the outdir
-        hash_dict = vars(config).copy()
-        hash_dict.pop('outdir')
+    # hash the arguments except for the outdir
+    hash_dict = vars(config).copy()
+    hash_dict.pop('outdir')
 
-        # make a subdirectory for each run
-        hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
-        config.hash=hash_var
-        train_dir = os.path.join(save_dir, hash_var)
-        if not os.path.exists(train_dir):
-            os.makedirs(train_dir)
+    # make a subdirectory for each run
+    hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
+    config.hash=hash_var
+    train_dir = os.path.join(save_dir, hash_var)
+    if not os.path.exists(train_dir):
+        os.makedirs(train_dir)
 
-        config.hash = hash_var
+    config.hash = hash_var
 
-        run_dict = {
-            "corr": data_config.corr,
-            "state_dim": data_config.state_dim,
-            "num_actions": model_config.num_actions,
-            "num_train_samples":data_config.num_train_samples,
-            "num_test_samples":data_config.num_test_samples,
-            "num_agents": data_config.num_agents,
-            "data_seed": config.data_seed,
-            "data_hash": config.data_dir,
-            "hash": config.hash,
-            "model_name": model_config.model_name,
-            "decoder_type": model_config.decoder_type,
-            "P": model_config.P,
-            "inter_model_type": model_config.inter_model_type,
-            "seq_len": model_config.seq_len,
-            "learning_rate": config.learning_rate,
-            "batch_size": config.batch_size
-        }
+    run_dict = {
+        "corr": data_config.corr,
+        "wstate": data_config.state_weight,
+        "state_dim": data_config.state_dim,
+        "num_actions": model_config.num_actions,
+        "num_train_samples":data_config.num_train_samples,
+        "num_test_samples":data_config.num_test_samples,
+        "num_agents": data_config.num_agents,
+        "data_seed": config.data_seed,
+        "data_hash": config.data_dir,
+        "hash": config.hash,
+        "model_name": model_config.model_name,
+        "decoder_type": model_config.decoder_type,
+        "P": model_config.P,
+        "inter_model_type": model_config.inter_model_type,
+        "use_pos_enc": model_config.use_pos_enc,
+        "seq_len": model_config.seq_len,
+        "learning_rate": config.learning_rate,
+        "batch_size": config.batch_size
+    }
 
-        return train_data, test_data, data_config, model_config, config, run_dict, train_dir
+    return train_data, test_data, data_config, model_config, config, run_dict, train_dir
 
 def get_grad_norms(model, model_config):
     #store grad norms of each module
@@ -206,7 +214,7 @@ def find_lr(optimizer, model, dataloader, criterion, device=device):
     # find learning rate
     min_lr,max_lr = 0.00001, 0.01
     num_lr_values = 10
-    num_test_batches = 50
+    num_test_batches = 100
     learning_rates = np.logspace(np.log10(min_lr),np.log10(max_lr), num_lr_values)
     orig_state_dict = copy.deepcopy(model.state_dict())
     losschange_fn = partial(get_losschange_over_batch, model=model, orig_paras=orig_state_dict, dataloader=dataloader, criterion=criterion, device=device, num_test_batches=num_test_batches)
@@ -214,17 +222,17 @@ def find_lr(optimizer, model, dataloader, criterion, device=device):
     # grid search
     delta_loss = [losschange_fn(learning_rate) for learning_rate in learning_rates]
     print(delta_loss)
-    opt_learning_rate = learning_rates[np.argmin(delta_loss)]
+    opt_ind =np.argmin(delta_loss)
+    opt_learning_rate = learning_rates[opt_ind]
     print(f"Is {opt_learning_rate:.5f} in interior of {min_lr:.5f} and {max_lr:.5f}?")
     if opt_learning_rate > min_lr and opt_learning_rate < max_lr:
         # polish
         iterations = 10
-        start_width_factor = 4
-        low, high = opt_learning_rate/start_width_factor, opt_learning_rate*start_width_factor
+        low, high = learning_rates[opt_ind-1], learning_rates[opt_ind+1]
         low, high = low if low > min_lr else min_lr, high if high < max_lr else max_lr
         print(f"{low} {high}")
-        opt_learning_rate=minimize_scalar(losschange_fn, bracket=(low, high), method='Brent', options={"maxiter": iterations}).x
-
+        opt_learning_rate=minimize_scalar(losschange_fn, bracket=(low, high), method='Brent', options={'disp':True, "maxiter": iterations}).x
+        print(f"res:{opt_learning_rate}")
     return opt_learning_rate
 
 def train(config):
@@ -254,7 +262,8 @@ def train(config):
     criterion = nn.CrossEntropyLoss()
 
     # pretraining hyper-parameter tuning
-    config.learning_rate = find_lr(optimizer, model, train_dataloader, criterion)
+    config.learning_rate = args.learning_rate #find_lr(optimizer, model, train_dataloader, criterion)
+
     # reinitialize to be safe (should reset seed?).
     model = STOMP(model_config).to(device)
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
@@ -268,12 +277,13 @@ def train(config):
         f"using batchsize {config.batch_size} and LR {config.learning_rate}", flush=True)
 
     # initialize wandb
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
-        ['N','P','l','c','lr','im','dt'],
-        ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type']
-        )])
-    run=wandb.init(project="ToMMM", group="postICMLgsystest",job_type=None, config=run_dict, name=wandb_run_name+'test1state_wo_pe')
+    # timestamp = time.strftime("%Y%m%d-%H%M%S")
+    if args.use_wandb:
+        wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
+            ['N','P','l','c','lr','im','dt','pe'],
+            ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type','use_pos_enc']
+            )])
+        run=wandb.init(project="ToMMM", group="pre_aamas",job_type=None, config=run_dict, name=wandb_run_name)
 
 
     # train
@@ -303,12 +313,14 @@ def train(config):
         epoch_data.update(module_gradnorms)
         all_gradnorms = dict(zip(['allgrads/'+key for key in all_gradnorms.keys()], all_gradnorms.values())) 
         epoch_data.update(all_gradnorms)
-        run.log(epoch_data)
+        if args.use_wandb:
+            run.log(epoch_data)
         epoch_data.update(run_dict)
         locally_logged.append(epoch_data)
 
     df = pd.DataFrame(locally_logged)
-    wandb.finish()
+    if args.use_wandb:
+        wandb.finish()
 
     training_run_info = \
         f"_{model_config.model_name}"+\
@@ -352,7 +364,8 @@ def collect_parameters_and_gen_data():
         "num_agents": args.N,
         "state_dim": args.S,
         "model_name":"logit",
-        "corr": args.corr
+        "corr": args.corr,
+        "state_weight": args.wstate
     }
 
     data_dir=gen_logit_dataset(dataset_config)
@@ -360,6 +373,7 @@ def collect_parameters_and_gen_data():
     # training configuration for (s,a) block data
     train_config = {
         'P': args.P,
+        'use_pos_enc': args.use_pos_enc,
         'num_epochs': args.num_epochs,
         'learning_rate': args.learning_rate,
         'batch_size': args.batch_size,
@@ -372,12 +386,13 @@ def collect_parameters_and_gen_data():
     # add model architexture configuration    
     model_settings = {'seq_len': args.seq_len}
     model_settings['model_name'] = 'STOMP'
-    # model_settings['inter_model_type'] = None
+    # model_settings['inter_model_type'] = None 
     # model_settings['inter_model_type'] = 'rnn'
     # model_settings['inter_model_type'] = 'attn'
-    model_settings['inter_model_type'] = 'ipattn'
+    # model_settings['inter_model_type'] = 'ipattn'
     # model_settings['inter_model_type'] = 'SAB'
     # model_settings['inter_model_type'] = 'ISAB'
+    model_settings['inter_model_type'] = args.inter if args.inter!='None' else None
     model_settings['decoder_type'] = 'MLP'
     # model_settings['decoder_type'] = 'BuffAtt'
 
@@ -387,7 +402,13 @@ def collect_parameters_and_gen_data():
 
 
 if __name__ == "__main__":
+    #at N=10
+    #args.wstate=[0,1,10]
+    #args.use_pos_enc=[0,1]
+    #args.seq_len=[1,16]
+    #args.inter_model=[None,attn]
 
     dataset_config,train_config=collect_parameters_and_gen_data()
+
     store_name = train(train_config)
     print(f'finished. output stored at: {store_name}')
