@@ -21,6 +21,11 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Create a symlink to the scratch folder for Slurm logs.
+```bash
+ln -s $SCRATCH scratch
+```
+
 ## Run the code
 
 ```bash
