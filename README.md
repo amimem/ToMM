@@ -17,11 +17,12 @@ Create a virtual environment and install the requirements.
 
 ```bash
 python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
 ## Run the code
 
 ```bash
-python mlp_match.py
+python mlp_match.py ARGUMENTS
 ```
