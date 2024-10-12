@@ -109,7 +109,7 @@ class SeqEnc(nn.Module):
 
         if self.inter_model_type == 'attn':
             # attention (compute is quadratic in num agents)
-            return x+ self.attn(x,x)
+            return x+ self.attn(x,x,self.attn_fcs1)
         elif self.inter_model_type == 'ipattn':
             # inducing point attention (compute is linear in num agents)
             return x+self.attn(x,self.attn(self.ips.weight.repeat((batch_size,1,1)),x,self.attn_fcs1),self.attn_fcs2) # TODO: replace repeat with more efficient broadcasting
@@ -322,8 +322,9 @@ class logit(nn.Module):
 
         assert config.num_actions ==2, "implemented for num_action = 2"
         mean = np.zeros(config.num_agents)
+        #scales poorly with the number of agents. A mixture model would be WAY more efficient
         cov = config.corr*np.ones((config.num_agents,config.num_agents))+\
-                (1-config.corr)*np.eye(config.num_agents)
+            (1-config.corr)*np.eye(config.num_agents)
         num_obs = 2**config.state_dim
         action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
         # introduce label disorder for this action
@@ -333,7 +334,7 @@ class logit(nn.Module):
         self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
         self.mask = config.num_actions**np.arange(config.state_dim)
         self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
-        self.state_weight_factor = config.state_weight
+        self.agent_weight_factor = config.agent_weight
 
     def forward(self, state):
         # dim(state): batch_size, state_dim
@@ -342,7 +343,7 @@ class logit(nn.Module):
         agent_component = self.action_0_logits[state_idx]
         state_component = state[self.state_fn[state_idx]]
         
-        action_0_logits = (self.state_weight_factor*state_component + agent_component)/np.sqrt(self.state_weight_factor+1)
+        action_0_logits = (state_component + self.agent_weight_factor*agent_component)/np.sqrt(self.agent_weight_factor+1)
         return np.vstack([action_0_logits,-action_0_logits]).T
 
     def obs2index(self, obs):

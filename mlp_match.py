@@ -34,7 +34,7 @@ parser.add_argument('--inter', type=str, default='None', help='label of interact
 # Fixed training data properties
 parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
-parser.add_argument('--wstate', type=float, default=1.0, help='weight of state-dependence')
+parser.add_argument('--wagent', type=float, default=1.0, help='weight of agent-dependence')
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
@@ -115,7 +115,7 @@ def get_data_and_configs(config):
     data_config = SimpleNamespace(**data_config['file_attrs'])
     model_config = SimpleNamespace(**config['model_settings'])
     config = SimpleNamespace(**config)
-    print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}, wstate={data_config.state_weight}")
+    print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}, wagent={data_config.agent_weight}")
     
     model_config.num_actions = data_config.num_actions
     model_config.num_agents = data_config.num_agents
@@ -143,7 +143,7 @@ def get_data_and_configs(config):
 
     run_dict = {
         "corr": data_config.corr,
-        "wstate": data_config.state_weight,
+        "wagent": data_config.agent_weight,
         "state_dim": data_config.state_dim,
         "num_actions": model_config.num_actions,
         "num_train_samples":data_config.num_train_samples,
@@ -299,7 +299,7 @@ def train(config):
 
         print(
             f"Epoch {epoch+1}/{config.num_epochs}, " +
-            f"Train/Test Loss: {train_epoch_loss:.4f}/{test_epoch_loss:.4f}, " +
+            f"Train/Test Loss: {train_epoch_loss/data_config.num_agents:.4f}/{test_epoch_loss/data_config.num_agents:.4f}, " +
             f"Accuracy: {train_epoch_accuracy:.4f}/{test_epoch_accuracy:.4f}, " +
             f"took {int(time.time()-st)} s"
         )
@@ -365,7 +365,7 @@ def collect_parameters_and_gen_data():
         "state_dim": args.S,
         "model_name":"logit",
         "corr": args.corr,
-        "state_weight": args.wstate
+        "agent_weight": args.wagent
     }
 
     data_dir=gen_logit_dataset(dataset_config)
@@ -403,7 +403,7 @@ def collect_parameters_and_gen_data():
 
 if __name__ == "__main__":
     #at N=10
-    #args.wstate=[0,1,10]
+    #args.wagent=[0,1,10]
     #args.use_pos_enc=[0,1]
     #args.seq_len=[1,16]
     #args.inter_model=[None,attn]
