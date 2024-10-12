@@ -31,4 +31,5 @@ If you are using Slurm, create a symlink to the scratch folder for the logs.
 
 ```bash
 ln -s $SCRATCH scratch
+sbatch scripts/slurm.sh
 ```
