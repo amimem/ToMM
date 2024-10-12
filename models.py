@@ -5,7 +5,7 @@ import numpy as np
 import math
 
 class STOMP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, device):
         super().__init__()
 
         self.decoder_type = config.decoder_type
@@ -23,9 +23,14 @@ class STOMP(nn.Module):
         print(f"enc_hidden/enc_out dims: {config.enc_hidden_dim}/{config.enc_out_dim}")
 
         # modules
-        self.seq_enc = SeqEnc(config, inter_model_type=config.inter_model_type) # (bsz,num_agents,seq_len) to (bsz,num_agents,seq_len, enc_dim)
-        self.decoder = BufferAttentionDecoder(config) if self.decoder_type == 'BuffAtt' else MLP(
-            config.enc_out_dim, config.dec_hidden_dim, config.num_actions)
+        self.seq_enc = SeqEnc(config, device, inter_model_type=config.inter_model_type).to(device) # (bsz,num_agents,seq_len) to (bsz,num_agents,seq_len, enc_dim)
+        self.decoder = BufferAttentionDecoder(config).to(device) if self.decoder_type == 'BuffAtt' else MLP(
+            config.enc_out_dim, config.dec_hidden_dim, config.num_actions).to(device)
+        
+        # print submodules' devices
+        print(f"seq_enc device: {next(self.seq_enc.parameters()).device}")
+        print(f"decoder device: {next(self.decoder.parameters()).device}")
+
     def forward(self, state_seq, actions_seq):
         # state_seq: (bsz, seq_len, state_dim)
         # actions_seq: (bsz, seq_len, num_agents, num_actions)
@@ -44,7 +49,7 @@ class STOMP(nn.Module):
 
 class SeqEnc(nn.Module):
     # MLP-map the states&actions, sequence process, average over steps, and finally MLP-map to latent space
-    def __init__(self, config,inter_model_type=None):
+    def __init__(self, config, device, inter_model_type=None):
         super().__init__()
         self.enc_hidden_dim = config.enc_hidden_dim
         self.fc_in = MLP(config.state_dim+config.num_actions,config.enc_MLPhidden_dim,self.enc_hidden_dim)
@@ -52,7 +57,7 @@ class SeqEnc(nn.Module):
         #modules for sequence model
         self.LSTM = nn.LSTM(self.enc_hidden_dim, self.enc_hidden_dim)
         self.use_pos_enc = config.use_pos_enc
-        self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents)
+        self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents).to(device)
 
         #modules for interaction model
         self.inter_model_type = inter_model_type
@@ -225,7 +230,7 @@ class ISAB(nn.Module):
         return self.mab1(X, H)
 
 
-class BufferAttentionDecoder():
+class BufferAttentionDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.bufferoutput_dim = (config.num_agents, config.num_actions)

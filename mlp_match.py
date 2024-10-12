@@ -171,7 +171,7 @@ def get_grad_norms(model, model_config):
     all_gradnorms = {}
     for name, param in model.named_parameters():
         if param.requires_grad and param.grad is not None:
-            grad = param.grad.detach().flatten()
+            grad = param.grad.detach().flatten().cpu()
             all_gradnorms[name]=torch.linalg.vector_norm(grad).numpy()/len(grad)
             for mit, module_name in enumerate(module_name_list):
                 if module_name in name:
@@ -249,7 +249,9 @@ def train(config):
  
     # model
     if model_config.model_name=='STOMP':
-        model = STOMP(model_config).to(device)
+        model = STOMP(model_config, device).to(device)
+        #check model device
+        print(f"Model's device: {next(model.parameters()).device}")
     elif model_config.model_name.split('_')[0]=='MLP':
         model = MLPbaselines(model_config).to(device)
     else:
@@ -265,7 +267,9 @@ def train(config):
     config.learning_rate = args.learning_rate #find_lr(optimizer, model, train_dataloader, criterion)
 
     # reinitialize to be safe (should reset seed?).
-    model = STOMP(model_config).to(device)
+    model = STOMP(model_config, device).to(device)
+    # check model device
+    print(f"Model's device: {next(model.parameters()).device}")
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
     # logging number of parameters
