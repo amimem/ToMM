@@ -174,15 +174,25 @@ def save_dataset_from_model(config, datasets):
     # save the data
     filename = os.path.join(output_dir, "data" + '.h5')
     attrs_filename = os.path.join(output_dir, "config" + '.yaml')
-    with h5py.File(filename, 'w') as f, open(attrs_filename, 'w') as yaml_file:
-        f.attrs.update(config)
-        f.attrs['timestamp'] = timestamp
-        attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
-        attrs_dict['file_attrs']['hash'] = hash_var
-        for dataset_name, dataset in datasets.items():
-            group = f.create_group(dataset_name)
-            for key, value in dataset.items():
-                group.create_dataset(key, data=value)
-        yaml.dump(attrs_dict, yaml_file)
+
+    # Check if the file exists before proceeding
+    if os.path.exists(filename) and os.path.exists(attrs_filename):
+        print(f"Files '{filename}' and '{attrs_filename}' already exist. Skipping this step.")
+    else:
+        try:
+            # If the file doesn't exist, proceed with creation
+            with h5py.File(filename, 'w') as f, open(attrs_filename, 'w') as yaml_file:
+                f.attrs.update(config)
+                f.attrs['timestamp'] = timestamp
+                attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
+                attrs_dict['file_attrs']['hash'] = hash_var
+                for dataset_name, dataset in datasets.items():
+                    group = f.create_group(dataset_name)
+                    for key, value in dataset.items():
+                        group.create_dataset(key, data=value)
+                yaml.dump(attrs_dict, yaml_file)
+                print(f"Created files '{filename}' and '{attrs_filename}'")
+        except BlockingIOError as e:
+            print(f"Error creating files: {str(e)}")
 
     return output_filename
