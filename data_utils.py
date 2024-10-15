@@ -115,32 +115,39 @@ class ContextDataset(Dataset):
 
 def gen_logit_dataset(config):
 
-    datasets = {}
-    data_seed_list = range(2)
-    for ix, data_seed in enumerate(data_seed_list):
-        print(f"running seed {data_seed} of {len(data_seed_list)}")
-        rng = np.random.default_rng(seed=data_seed)
+    output_path = os.path.join(os.getcwd(), config['outdir'])
+    dir_exists: bool = os.path.exists(output_path)
 
-        model=logit(SimpleNamespace(**config),rng)
-        for label in ['train','test']:
-            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],rng)
-            actions= []
-            for state in states:
-                action_probability_vectors = model.forward(state)
-                actions.append(np.argmax(action_probability_vectors, axis=-1))
-            actions = np.vstack(actions)
-            # save data
-            shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
-            datasets[f"{label}_dataset_{data_seed}"] = { 
-                "data_seed": data_seed, 
-                "states": states[shuffled_inds], 
-                "actions": actions[shuffled_inds],
-                "preferred_actions": model.action_at_corr1
-                }
+    if not dir_exists:
+        os.makedirs(output_path)
 
-    data_hash=save_dataset_from_model(config, datasets)
+        datasets = {}
+        data_seed_list = range(2)
+        for ix, data_seed in enumerate(data_seed_list):
+            print(f"running seed {data_seed} of {len(data_seed_list)}")
+            rng = np.random.default_rng(seed=data_seed)
 
-    return data_hash
+            model=logit(SimpleNamespace(**config),rng)
+            for label in ['train','test']:
+                states=sample_states(config[f'num_{label}_samples'],config['state_dim'],rng)
+                actions= []
+                for state in states:
+                    action_probability_vectors = model.forward(state)
+                    actions.append(np.argmax(action_probability_vectors, axis=-1))
+                actions = np.vstack(actions)
+                # save data
+                shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
+                datasets[f"{label}_dataset_{data_seed}"] = { 
+                    "data_seed": data_seed, 
+                    "states": states[shuffled_inds], 
+                    "actions": actions[shuffled_inds],
+                    "preferred_actions": model.action_at_corr1
+                    }
+                
+    out_dir = make_hash_dir(config)
+    save_datasets(config, datasets, out_dir) if not dir_exists else print(f"Directory '{out_dir}' already exists. Skipping save step.")
+
+    return out_dir
 
 def sample_states(num_samples,state_dim,rng):
     # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
@@ -148,7 +155,7 @@ def sample_states(num_samples,state_dim,rng):
 
     return states
 
-def save_dataset_from_model(config, datasets):
+def make_hash_dir(config):
 
     output_path = os.path.join(os.getcwd(), config['outdir'])
     os.makedirs(output_path, exist_ok=True)
@@ -162,8 +169,8 @@ def save_dataset_from_model(config, datasets):
 
     # get the hash of the hash_dict
     hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
-    # get a timestamp - use this to [n] either make the output folder unique or [y] as file metadata
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    config['hash'] = hash_var
+
     # combine the hash to get a unique filename
     output_filename = f"data_{hash_var}"
     print('saving '+output_filename)
@@ -171,9 +178,17 @@ def save_dataset_from_model(config, datasets):
     output_dir = os.path.join(output_path, output_filename)
     os.makedirs(output_dir, exist_ok=True)
 
+    return output_dir
+
+def save_datasets(config, datasets, output_dir):
+
     # save the data
     filename = os.path.join(output_dir, "data" + '.h5')
     attrs_filename = os.path.join(output_dir, "config" + '.yaml')
+
+    # get a timestamp - use this to [n] either make the output folder unique or [y] as file metadata
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    # hash_var = config['hash']
 
     # Check if the file exists before proceeding
     if os.path.exists(filename) and os.path.exists(attrs_filename):
@@ -185,7 +200,7 @@ def save_dataset_from_model(config, datasets):
                 f.attrs.update(config)
                 f.attrs['timestamp'] = timestamp
                 attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
-                attrs_dict['file_attrs']['hash'] = hash_var
+                # attrs_dict['file_attrs']['hash'] = hash_var
                 for dataset_name, dataset in datasets.items():
                     group = f.create_group(dataset_name)
                     for key, value in dataset.items():
@@ -194,5 +209,3 @@ def save_dataset_from_model(config, datasets):
                 print(f"Created files '{filename}' and '{attrs_filename}'")
         except BlockingIOError as e:
             print(f"Error creating files: {str(e)}")
-
-    return output_filename
