@@ -272,6 +272,10 @@ def train(config):
     print(f"Model's device: {next(model.parameters()).device}")
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
+    # prine all named parameters
+    for name, param in model.named_parameters():
+        print(name, param.shape)
+
     # logging number of parameters
     model_config.Pactual = model.count_parameters()
     run_dict['Pactual'] = model_config.Pactual
@@ -287,7 +291,7 @@ def train(config):
             ['N','P','l','c','lr','im','dt','pe'],
             ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type','use_pos_enc']
             )])
-        run=wandb.init(project="ToMMM", group="pre_aamas",job_type=None, config=run_dict, name=wandb_run_name)
+        run=wandb.init(project="ToMMM", entity="abstraction", group="pre_aamas",job_type=None, config=run_dict, name=wandb_run_name)
 
 
     # train
