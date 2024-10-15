@@ -29,7 +29,7 @@ def load_data(data_dir, data_seed=0):
     with open(config_filename, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
         print(config, flush=True)
-
+    print(datasets.keys())
     train_dataset = datasets[f"train_dataset_{data_seed}"]
     test_dataset = datasets[f"test_dataset_{data_seed}"]
     return train_dataset, test_dataset, config
@@ -112,6 +112,12 @@ class ContextDataset(Dataset):
         
         return states, action_onehots_seq, target_actions
 
+def sample_states(num_samples,state_dim,rng):
+    # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
+    states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
+
+    return states
+
 
 def gen_logit_dataset(config):
 
@@ -138,20 +144,10 @@ def gen_logit_dataset(config):
                 "preferred_actions": model.action_at_corr1
                 }
 
-    data_hash=save_dataset_from_model(config, datasets)
+    return datasets
 
-    return data_hash
 
-def sample_states(num_samples,state_dim,rng):
-    # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
-    states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
-
-    return states
-
-def save_dataset_from_model(config, datasets):
-
-    output_path = os.path.join(os.getcwd(), config['outdir'])
-    os.makedirs(output_path, exist_ok=True)
+def get_hash(config):
 
     # take all args except output path
     hash_dict = config.copy()
@@ -162,13 +158,18 @@ def save_dataset_from_model(config, datasets):
 
     # get the hash of the hash_dict
     hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
-    # get a timestamp - use this to [n] either make the output folder unique or [y] as file metadata
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    config['hash'] = hash_var
+
     # combine the hash to get a unique filename
     output_filename = f"data_{hash_var}"
-    print('saving '+output_filename)
 
-    output_dir = os.path.join(output_path, output_filename)
+    # return output_dir
+    return output_filename
+
+
+def save_datasets(config, datasets, output_dir):
+
+    #make data folder if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
     # save the data
@@ -176,23 +177,45 @@ def save_dataset_from_model(config, datasets):
     attrs_filename = os.path.join(output_dir, "config" + '.yaml')
 
     # Check if the file exists before proceeding
-    if os.path.exists(filename) and os.path.exists(attrs_filename):
-        print(f"Files '{filename}' and '{attrs_filename}' already exist. Skipping this step.")
-    else:
-        try:
-            # If the file doesn't exist, proceed with creation
-            with h5py.File(filename, 'w') as f, open(attrs_filename, 'w') as yaml_file:
-                f.attrs.update(config)
-                f.attrs['timestamp'] = timestamp
-                attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
-                attrs_dict['file_attrs']['hash'] = hash_var
-                for dataset_name, dataset in datasets.items():
-                    group = f.create_group(dataset_name)
-                    for key, value in dataset.items():
-                        group.create_dataset(key, data=value)
-                yaml.dump(attrs_dict, yaml_file)
-                print(f"Created files '{filename}' and '{attrs_filename}'")
-        except BlockingIOError as e:
-            print(f"Error creating files: {str(e)}")
+    # if os.path.exists(filename) and os.path.exists(attrs_filename):
+    #     print(f"Files '{filename}' and '{attrs_filename}' already exist. Skipping this step.")
+    # else:
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    try:
+        # If the file doesn't exist, proceed with creation
+        with h5py.File(filename, 'w') as f, open(attrs_filename, 'w') as yaml_file:
+            f.attrs.update(config)
+            f.attrs['timestamp'] = timestamp
+            attrs_dict = {'file_attrs': {k: numpy_scalar_to_python(v) for k, v in f.attrs.items()}}
+            for dataset_name, dataset in datasets.items():
+                group = f.create_group(dataset_name)
+                for key, value in dataset.items():
+                    group.create_dataset(key, data=value)
+            yaml.dump(attrs_dict, yaml_file)
+            print(f"Created files '{filename}' and '{attrs_filename}'")
+    except BlockingIOError as e:
+        print(f"Error creating files: {str(e)}")
 
-    return output_filename
+
+def get_logit_dataset_pathname(config):
+
+    #get hash-based name of data dir
+    out_dir = get_hash(config)
+
+    #output root dir name
+    output_path = os.path.join(os.getcwd(), config['outdir'],out_dir)
+
+    #data output file names
+    filename = os.path.join(output_path, "data" + '.h5')
+    attrs_filename = os.path.join(output_path, "config" + '.yaml')
+
+    #check
+    if os.path.isfile(filename) and os.path.isfile(attrs_filename):
+        print(f"Files '{filename}' and '{attrs_filename}' already exist and will be used.")
+    else:
+        print('at least one of data file and config file does not exist, so will generate both now...')
+        datasets = gen_logit_dataset(config)
+        print("saving them...")
+        save_datasets(config, datasets, output_path)
+
+    return out_dir
