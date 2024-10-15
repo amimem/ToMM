@@ -16,13 +16,13 @@ from functools import partial
 from scipy.optimize import minimize_scalar
 # import custom functions
 from models import STOMP, MLPbaselines
-from data_utils import load_data, gen_logit_dataset, ContextDataset
+from data_utils import load_data, get_logit_dataset_pathname, ContextDataset
 
 # Create the parser
 parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
-parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
+parser.add_argument('--N', type=int, default=20, help='num agents. [10,100,1000]')
 parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=16, help='context length.')
@@ -37,7 +37,7 @@ parser.add_argument('--A', type=int, default=2, help='single-agent action space 
 parser.add_argument('--wagent', type=float, default=1.0, help='weight of agent-dependence')
 
 # Training parameters
-parser.add_argument('--num_epochs', type=int, default=50, help='number of epochs')
+parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
 parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--batch_size', type=int, default=8, help='batch size')
 parser.add_argument('--data_seed', type=int, default=0, help='data seed for generating training data')
@@ -376,7 +376,7 @@ def collect_parameters_and_gen_data():
         "agent_weight": args.wagent
     }
 
-    data_dir=gen_logit_dataset(dataset_config)
+    data_dir=get_logit_dataset_pathname(dataset_config)
 
     # training configuration for (s,a) block data
     train_config = {
