@@ -12,7 +12,7 @@ class STOMP(nn.Module):
         # self.state_dim = config.state_dim
         # self.num_actions = config.num_actions
         # self.num_agents = config.num_agents
-
+        config['num_inducing_points'] = 10
         self.W = int(get_width(config))
         config.enc_MLPhidden_dim = self.W
         config.enc_hidden_dim = self.W
@@ -329,9 +329,10 @@ def get_width(v):
         a = (2*n_layers+1+8+8+1) #17
         if v.inter_model_type==None:
             a = (2*n_layers+1+8+1) #14
+            b = (v.num_actions+v.state_dim)+4+v.num_actions
         elif v.inter_model_type=='ISAB':
             a = (2*n_layers+1+8+8+1) #22
-        b = (v.num_actions+v.state_dim)+4+v.num_actions
+            b = (v.num_actions+v.state_dim)+4+v.num_actions+v.num_inducing_points #10 inducing points
         c = -v.P
         W = solve_quadratic(a, b, c)
     elif v.model_name == 'MLP_nosharing':
