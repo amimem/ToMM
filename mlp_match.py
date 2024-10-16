@@ -288,8 +288,8 @@ def train(config):
     # timestamp = time.strftime("%Y%m%d-%H%M%S")
     if args.use_wandb:
         wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
-            ['N','P','l','c','lr','im','dt','pe'],
-            ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type','use_pos_enc']
+            ['N','P','l','c','lr','im','dt','pe','wag'],
+            ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type','use_pos_enc','wagent']
             )])
         run=wandb.init(project="ToMMM", entity="abstraction", group="pre_aamas",job_type=None, config=run_dict, name=wandb_run_name)
 
@@ -394,13 +394,7 @@ def collect_parameters_and_gen_data():
     # add model architexture configuration    
     model_settings = {'seq_len': args.seq_len}
     model_settings['model_name'] = 'STOMP'
-    # model_settings['inter_model_type'] = None 
-    # model_settings['inter_model_type'] = 'rnn'
-    # model_settings['inter_model_type'] = 'attn'
-    # model_settings['inter_model_type'] = 'ipattn'
-    # model_settings['inter_model_type'] = 'SAB'
-    # model_settings['inter_model_type'] = 'ISAB'
-    model_settings['inter_model_type'] = args.inter if args.inter!='None' else None
+    model_settings['inter_model_type'] = args.inter if args.inter!='None' else None #'rnn','attn','ipattn','SAB','ISAB'
     model_settings['decoder_type'] = 'MLP'
     # model_settings['decoder_type'] = 'BuffAtt'
 
