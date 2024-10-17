@@ -373,7 +373,7 @@ class logit(nn.Module):
             (1-config.corr)*np.eye(config.num_agents)
         num_obs = 2**config.state_dim
         # action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
-        action_at_corr1_logits = np.sqrt(1 - config.corr)* rng.normal(size=(num_obs,self.num_agents))
+        action_at_corr1_logits = np.sqrt(1 - config.corr)* rng.normal(size=(num_obs,config.num_agents))\
                 + np.sqrt(config.corr) * rng.normal(size=num_obs)[:,np.newaxis]
 
         # introduce label disorder for this action
