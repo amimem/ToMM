@@ -28,7 +28,7 @@ parser.add_argument('--P', type=int, default=int(5e5), help='training model size
 parser.add_argument('--seq_len', type=int, default=16, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
 parser.add_argument('--use_pos_enc', type=int, default=1, help='if 1, use positional encodings, else do not')
-parser.add_argument('--inter', type=str, default='None', help='label of interaction model to use (None,attn,ipattn, ...)')
+parser.add_argument('--inter', type=str, default='None', help='label of interaction model to use (None,ISAB,attn,ipattn, ...)')
 
 
 # Fixed training data properties
