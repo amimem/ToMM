@@ -22,7 +22,7 @@ from data_utils import load_data, get_logit_dataset_pathname, ContextDataset
 parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
-parser.add_argument('--N', type=int, default=20, help='num agents. [10,100,1000]')
+parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
 parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=16, help='context length.')
@@ -35,6 +35,7 @@ parser.add_argument('--inter', type=str, default='None', help='label of interact
 parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 parser.add_argument('--wagent', type=float, default=1.0, help='weight of agent-dependence')
+parser.add_argument('--state_corr_len', type=float, default=1.0, help='state correlation length')
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
@@ -144,6 +145,7 @@ def get_data_and_configs(config):
     run_dict = {
         "corr": data_config.corr,
         "wagent": data_config.agent_weight,
+        "state_corr_len": data_config.state_corr_len,
         "state_dim": data_config.state_dim,
         "num_actions": model_config.num_actions,
         "num_train_samples":data_config.num_train_samples,
@@ -288,10 +290,10 @@ def train(config):
     # timestamp = time.strftime("%Y%m%d-%H%M%S")
     if args.use_wandb:
         wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
-            ['N','P','l','c','lr','im','dt','pe','wag'],
-            ['num_agents','Pactual','seq_len','corr','learning_rate','inter_model_type','decoder_type','use_pos_enc','wagent']
+            ['N','P','l','c','sc','lr','im','dt','pe','wag'],
+            ['num_agents','Pactual','seq_len','corr','state_corr_len','learning_rate','inter_model_type','decoder_type','use_pos_enc','wagent']
             )])
-        run=wandb.init(project="ToMMM", entity="abstraction", group="pre_aamas",job_type=None, config=run_dict, name=wandb_run_name)
+        run=wandb.init(project="ToMMM", entity="abstraction", group="post_aamas",job_type=None, config=run_dict, name=wandb_run_name)
 
 
     # train
@@ -373,7 +375,8 @@ def collect_parameters_and_gen_data():
         "state_dim": args.S,
         "model_name":"logit",
         "corr": args.corr,
-        "agent_weight": args.wagent
+        "agent_weight": args.wagent,
+        "state_corr_len":args.state_corr_len
     }
 
     data_dir=get_logit_dataset_pathname(dataset_config)
