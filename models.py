@@ -5,14 +5,14 @@ import numpy as np
 import math
 
 class STOMP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, device):
         super().__init__()
 
         self.decoder_type = config.decoder_type
         # self.state_dim = config.state_dim
         # self.num_actions = config.num_actions
         # self.num_agents = config.num_agents
-
+        config.num_inducing_points = 10
         self.W = int(get_width(config))
         config.enc_MLPhidden_dim = self.W
         config.enc_hidden_dim = self.W
@@ -23,9 +23,13 @@ class STOMP(nn.Module):
         print(f"enc_hidden/enc_out dims: {config.enc_hidden_dim}/{config.enc_out_dim}")
 
         # modules
-        self.seq_enc = SeqEnc(config, inter_model_type=config.inter_model_type) # (bsz,num_agents,seq_len) to (bsz,num_agents,seq_len, enc_dim)
-        self.decoder = BufferAttentionDecoder(config) if self.decoder_type == 'BuffAtt' else MLP(
-            config.enc_out_dim, config.dec_hidden_dim, config.num_actions)
+        self.seq_enc = SeqEnc(config, device, inter_model_type=config.inter_model_type).to(device) # (bsz,num_agents,seq_len) to (bsz,num_agents,seq_len, enc_dim)
+        self.decoder = BufferAttentionDecoder(config).to(device) if self.decoder_type == 'BuffAtt' else MLP(
+            config.enc_out_dim, config.dec_hidden_dim, config.num_actions).to(device)
+        
+        # print submodules' devices
+        print(f"seq_enc device: {next(self.seq_enc.parameters()).device}")
+        print(f"decoder device: {next(self.decoder.parameters()).device}")
 
     def forward(self, state_seq, actions_seq):
         # state_seq: (bsz, seq_len, state_dim)
@@ -45,15 +49,15 @@ class STOMP(nn.Module):
 
 class SeqEnc(nn.Module):
     # MLP-map the states&actions, sequence process, average over steps, and finally MLP-map to latent space
-    def __init__(self, config,inter_model_type=None):
+    def __init__(self, config, device, inter_model_type=None):
         super().__init__()
         self.enc_hidden_dim = config.enc_hidden_dim
         self.fc_in = MLP(config.state_dim+config.num_actions,config.enc_MLPhidden_dim,self.enc_hidden_dim)
 
         #modules for sequence model
         self.LSTM = nn.LSTM(self.enc_hidden_dim, self.enc_hidden_dim)
-
-        self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents)
+        self.use_pos_enc = config.use_pos_enc
+        self.pe = self.positionalencoding1d(self.enc_hidden_dim,config.num_agents).to(device)
 
         #modules for interaction model
         self.inter_model_type = inter_model_type
@@ -79,15 +83,10 @@ class SeqEnc(nn.Module):
                     nn.Linear(self.enc_hidden_dim, self.d),
                     nn.Linear(self.enc_hidden_dim, self.d)
                 ])
-                self.ips = nn.Embedding(num_embeddings=self.num_inducing_points, embedding_dim=self.d_I)
-            elif self.inter_model_type == 'SAB':
-                self.SAB = nn.Sequential(
-                    SAB(self.d, self.d, 1, ln=False),
-                    SAB(self.d, self.d, 1, ln=False)
-                )            
+                self.ips = nn.Embedding(num_embeddings=self.num_inducing_points, embedding_dim=self.d_I)          
             elif self.inter_model_type == 'ISAB':
                 self.ISAB = ISAB(
-                    self.d, self.d, 1, self.num_inducing_points, ln=False
+                    self.enc_hidden_dim, self.enc_hidden_dim, self.num_inducing_points
                 )
             elif self.inter_model_type == 'rnn': #biLSTM':
                 self.seq_model_agent = nn.RNN(
@@ -110,10 +109,10 @@ class SeqEnc(nn.Module):
 
         if self.inter_model_type == 'attn':
             # attention (compute is quadratic in num agents)
-            return x+ self.attn(x,x)
+            return x + self.attn(x,x,self.attn_fcs1)
         elif self.inter_model_type == 'ipattn':
             # inducing point attention (compute is linear in num agents)
-            return x+self.attn(x,self.attn(self.ips.weight.repeat((batch_size,1,1)),x,self.attn_fcs1),self.attn_fcs2) # TODO: replace repeat with more efficient broadcasting
+            return x + self.attn(x, self.attn(self.ips.weight.repeat((batch_size,1,1)), x, self.attn_fcs1), self.attn_fcs2) # TODO: replace repeat with more efficient broadcasting
         elif self.inter_model_type == 'SAB':
             return self.SAB(x)
         elif self.inter_model_type == 'ISAB':
@@ -149,7 +148,8 @@ class SeqEnc(nn.Module):
         #process
         x = self.fc_in(x.flatten(1, 2)) # seq_len, batch_size*num_agents, enc_hidden_dim
         x = self.sequence_model(x).view((batch_size, num_agents, self.enc_hidden_dim)) # batch_size,num_agents, enc_hidden_dim
-        # x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
+        if self.use_pos_enc:
+            x = x + self.pe.unsqueeze(dim=0).repeat((batch_size,1,1))
         if self.inter_model_type is not None:
             x = self.agent_interaction_model(x)
         # x = self.fc_out(x) # batch_size, num_agents, enc_out_dim
@@ -175,57 +175,99 @@ class SeqEnc(nn.Module):
 
         return pe
 
+
 class MAB(nn.Module):
-    def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
+    def __init__(self, dim_Q, dim_K, dim_V):
         super(MAB, self).__init__()
         self.dim_V = dim_V
-        self.num_heads = num_heads
         self.fc_q = nn.Linear(dim_Q, dim_V)
         self.fc_k = nn.Linear(dim_K, dim_V)
         self.fc_v = nn.Linear(dim_K, dim_V)
-        if ln:
-            self.ln0 = nn.LayerNorm(dim_V)
-            self.ln1 = nn.LayerNorm(dim_V)
         self.fc_o = nn.Linear(dim_V, dim_V)
 
     def forward(self, Q, K):
         Q = self.fc_q(Q)
         K, V = self.fc_k(K), self.fc_v(K)
-
-        dim_split = self.dim_V // self.num_heads
-        Q_ = torch.cat(Q.split(dim_split, 2), 0)
-        K_ = torch.cat(K.split(dim_split, 2), 0)
-        V_ = torch.cat(V.split(dim_split, 2), 0)
-
-        A = torch.softmax(Q_.bmm(K_.transpose(1,2))/math.sqrt(self.dim_V), 2)
-        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
-        O = O if getattr(self, 'ln0', None) is None else self.ln0(O)
+        A = torch.softmax(Q.bmm(K.transpose(1,2))/math.sqrt(self.dim_V), 2)
+        O = Q + A.bmm(V)
         O = O + F.relu(self.fc_o(O))
-        O = O if getattr(self, 'ln1', None) is None else self.ln1(O)
         return O
 
 class SAB(nn.Module):
-    def __init__(self, dim_in, dim_out, num_heads, ln=False):
+    def __init__(self, dim_in, dim_out):
         super(SAB, self).__init__()
-        self.mab = MAB(dim_in, dim_in, dim_out, num_heads, ln=ln)
+        self.mab = MAB(dim_in, dim_in, dim_out)
 
     def forward(self, X):
         return self.mab(X, X)
 
 class ISAB(nn.Module):
-    def __init__(self, dim_in, dim_out, num_heads, num_inds, ln=False):
+    def __init__(self, dim_in, dim_out, num_inds):
+        '''
+        dim_in      number of agents
+        dim_out     encoding dimension
+        num_inds    number of inducing points
+        '''
         super(ISAB, self).__init__()
         self.I = nn.Parameter(torch.Tensor(1, num_inds, dim_out))
         nn.init.xavier_uniform_(self.I)
-        self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
-        self.mab1 = MAB(dim_in, dim_out, dim_out, num_heads, ln=ln)
+        self.mab0 = MAB(dim_out, dim_in, dim_out)
+        self.mab1 = MAB(dim_in, dim_out, dim_out)
 
     def forward(self, X):
         H = self.mab0(self.I.repeat(X.size(0), 1, 1), X)
         return self.mab1(X, H)
+# class MAB(nn.Module):
+#     def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
+#         super(MAB, self).__init__()
+#         self.dim_V = dim_V
+#         self.num_heads = num_heads
+#         self.fc_q = nn.Linear(dim_Q, dim_V)
+#         self.fc_k = nn.Linear(dim_K, dim_V)
+#         self.fc_v = nn.Linear(dim_K, dim_V)
+#         if ln:
+#             self.ln0 = nn.LayerNorm(dim_V)
+#             self.ln1 = nn.LayerNorm(dim_V)
+#         self.fc_o = nn.Linear(dim_V, dim_V)
+
+#     def forward(self, Q, K):
+#         Q = self.fc_q(Q)
+#         K, V = self.fc_k(K), self.fc_v(K)
+
+#         dim_split = self.dim_V // self.num_heads
+#         Q_ = torch.cat(Q.split(dim_split, 2), 0)
+#         K_ = torch.cat(K.split(dim_split, 2), 0)
+#         V_ = torch.cat(V.split(dim_split, 2), 0)
+
+#         A = torch.softmax(Q_.bmm(K_.transpose(1,2))/math.sqrt(self.dim_V), 2)
+#         O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
+#         O = O if getattr(self, 'ln0', None) is None else self.ln0(O)
+#         O = O + F.relu(self.fc_o(O))
+#         O = O if getattr(self, 'ln1', None) is None else self.ln1(O)
+#         return O
+
+# class SAB(nn.Module):
+#     def __init__(self, dim_in, dim_out, num_heads, ln=False):
+#         super(SAB, self).__init__()
+#         self.mab = MAB(dim_in, dim_in, dim_out, num_heads, ln=ln)
+
+#     def forward(self, X):
+#         return self.mab(X, X)
+
+# class ISAB(nn.Module):
+#     def __init__(self, dim_in, dim_out, num_heads, num_inds, ln=False):
+#         super(ISAB, self).__init__()
+#         self.I = nn.Parameter(torch.Tensor(1, num_inds, dim_out))
+#         nn.init.xavier_uniform_(self.I)
+#         self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
+#         self.mab1 = MAB(dim_in, dim_out, dim_out, num_heads, ln=ln)
+
+#     def forward(self, X):
+#         H = self.mab0(self.I.repeat(X.size(0), 1, 1), X)
+#         return self.mab1(X, H)
 
 
-class BufferAttentionDecoder():
+class BufferAttentionDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.bufferoutput_dim = (config.num_agents, config.num_actions)
@@ -282,11 +324,15 @@ def get_width(v):
     solve_quadratic = lambda a, b, c: (-b+np.sqrt(b**2-4*a*c))/(2*a)
     n_layers = 2
     if v.model_name == 'STOMP':
+
         # if v.decoder_type == 'MLP' and v.cross_talk:
-        a = (2*n_layers+1+8+3+1) #17
+        a = (2*n_layers+1+8+8+1) #17
         if v.inter_model_type==None:
-            a = a - 3
-        b = (v.num_actions+v.state_dim)+4+v.num_actions
+            a = (2*n_layers+1+8+1) #14
+            b = (v.num_actions+v.state_dim)+4+v.num_actions
+        elif v.inter_model_type=='ISAB':
+            a = (2*n_layers+1+8+8+1) #22
+            b = (v.num_actions+v.state_dim)+4+v.num_actions+v.num_inducing_points
         c = -v.P
         W = solve_quadratic(a, b, c)
     elif v.model_name == 'MLP_nosharing':
@@ -322,10 +368,14 @@ class logit(nn.Module):
 
         assert config.num_actions ==2, "implemented for num_action = 2"
         mean = np.zeros(config.num_agents)
+        #scales poorly with the number of agents. A mixture model would be WAY more efficient
         cov = config.corr*np.ones((config.num_agents,config.num_agents))+\
-                (1-config.corr)*np.eye(config.num_agents)
+            (1-config.corr)*np.eye(config.num_agents)
         num_obs = 2**config.state_dim
-        action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
+        # action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
+        action_at_corr1_logits = np.sqrt(1 - config.corr)* rng.normal(size=(num_obs,config.num_agents))\
+                + np.sqrt(config.corr) * rng.normal(size=num_obs)[:,np.newaxis]
+
         # introduce label disorder for this action
         self.action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
         # (Assuming action selection based on sign of logit)
@@ -333,6 +383,7 @@ class logit(nn.Module):
         self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
         self.mask = config.num_actions**np.arange(config.state_dim)
         self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
+        self.agent_weight_factor = config.agent_weight
 
     def forward(self, state):
         # dim(state): batch_size, state_dim
@@ -340,8 +391,8 @@ class logit(nn.Module):
         state_idx = self.obs2index(obs)
         agent_component = self.action_0_logits[state_idx]
         state_component = state[self.state_fn[state_idx]]
-        agent_weight_factor = 1
-        action_0_logits = (state_component + agent_weight_factor*agent_component)/np.sqrt(1+agent_weight_factor)
+        
+        action_0_logits = (state_component + self.agent_weight_factor*agent_component)/np.sqrt(self.agent_weight_factor+1)
         return np.vstack([action_0_logits,-action_0_logits]).T
 
     def obs2index(self, obs):

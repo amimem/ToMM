@@ -17,11 +17,19 @@ Create a virtual environment and install the requirements.
 
 ```bash
 python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
 ## Run the code
 
 ```bash
-python mlp_match.py
+python mlp_match.py ARGUMENTS
+```
+
+If you are using Slurm, create a symlink to the scratch folder for the logs.
+
+```bash
+ln -s $SCRATCH scratch
+sbatch scripts/slurm.sh
 ```
