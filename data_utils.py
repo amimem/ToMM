@@ -112,14 +112,18 @@ class ContextDataset(Dataset):
         
         return states, action_onehots_seq, target_actions
 
-def sample_states(num_samples,state_dim,state_corr_len,rng):
+def sample_states(num_samples,state_dim,num_axis_values,rng):
     # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
-    states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
+    # states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
     
-    # Generate the correlated process
-    rho = np.exp(-1 / state_corr_len)
-    for i in range(1, num_samples):
-        states[i] = rho * states[i-1] + np.sqrt(1 - rho**2) * states[i]
+    # # Generate the correlated process
+    # rho = np.exp(-1 / state_corr_len)
+    # for i in range(1, num_samples):
+    #     states[i] = rho * states[i-1] + np.sqrt(1 - rho**2) * states[i]
+
+
+    states=rng.rand(state_dim,num_samples)>0.5:
+    states=np.mod(np.cumsum(states, axis=0),num_axis_values)
 
     return states
 
@@ -131,10 +135,12 @@ def gen_logit_dataset(config):
     for ix, data_seed in enumerate(data_seed_list):
         print(f"running seed {data_seed} of {len(data_seed_list)}")
         rng = np.random.default_rng(seed=data_seed)
+        num_axis_values = 256
+        # model=logit(SimpleNamespace(**config),rng)
+        model=logit2(SimpleNamespace(**config),num_axis_values,rng)
 
-        model=logit(SimpleNamespace(**config),rng)
         for label in ['train','test']:
-            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],config['state_corr_len'],rng)
+            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],config['state_corr_len'],num_axis_values,rng)
             actions= []
             for state in states:
                 action_probability_vectors = model.forward(state)

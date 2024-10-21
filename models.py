@@ -398,6 +398,33 @@ class logit(nn.Module):
     def obs2index(self, obs):
         return np.sum(self.mask * obs[np.newaxis,:],-1)
 
+class logit2(nn.Module):
+    def __init__(self, config,num_axis_values,rng):
+        super().__init__()
+        shared_correlation_length = config.state_corr_len
+        private_correlation_length = config.state_corr_len
+        sys_size=[num_axis_values]*config.state_dim
+
+        lattice_values=np.arange(-int(sys_size[0]/2),int(sys_size[0]/2)+1)
+        self.X,self.Y=np.meshgrid(lattice_values,lattice_values)           
+        amplitude = np.sqrt(np.power(np.sqrt(self.X**2 + self.Y**2),alpha))
+        amplitude[(self.X==0) & (self.Y==0)]=0.
+        action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
+
+        self.action_0_logits=rng.normal(size=[config.num_agents+1]+sys_size)
+        #add spatial correlation by convolving (here by multiplying in Fourier)
+        self.action_0_logits=np.fft.fft2(self.action_0_logits)
+        self.action_0_logits=np.fft.ifft2(self.action_0_logits * amplitude).real
+        
+        #add agent-agent correlation by adding shared component
+        self.action_0_logits=np.sqrt(1 - config.corr)*self.action_0_logits + self.action_0_logits[-1][np.newaxis,:,:] * (np.sqrt(config.corr)*(2*self.action_at_corr1-1))[:,np.newaxis,np.newaxis]
+        #flip sign according to desired action at rho=1.
+        self.action_0_logits = self.action_0_logits[:-1] # num_agents x sys_size
+
+    def forward(self, state):
+        action_0_logits = self.action_0_logits[:,*state]
+        return np.vstack([action_0_logits,-action_0_logits]).T
+
 #------------------illustrative MLP baselines--------------------------
 
 class MLPbaselines(nn.Module):
