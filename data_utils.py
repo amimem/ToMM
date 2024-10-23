@@ -3,7 +3,7 @@ import h5py
 import numpy as np
 import yaml
 import torch
-from models import logit
+from models import logit,logit2
 from types import SimpleNamespace
 import os
 import hashlib
@@ -121,9 +121,8 @@ def sample_states(num_samples,state_dim,num_axis_values,rng):
     # for i in range(1, num_samples):
     #     states[i] = rho * states[i-1] + np.sqrt(1 - rho**2) * states[i]
 
-
-    states=rng.rand(state_dim,num_samples)>0.5:
-    states=np.mod(np.cumsum(states, axis=0),num_axis_values)
+    states=rng.random(size=(num_samples,state_dim)) > 0.5
+    states=np.mod(np.cumsum(states, axis=0), num_axis_values)
 
     return states
 
@@ -140,7 +139,7 @@ def gen_logit_dataset(config):
         model=logit2(SimpleNamespace(**config),num_axis_values,rng)
 
         for label in ['train','test']:
-            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],config['state_corr_len'],num_axis_values,rng)
+            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],num_axis_values,rng)
             actions= []
             for state in states:
                 action_probability_vectors = model.forward(state)
@@ -148,6 +147,7 @@ def gen_logit_dataset(config):
             actions = np.vstack(actions)
             # save data
             shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
+            print(states.shape)
             datasets[f"{label}_dataset_{data_seed}"] = { 
                 "data_seed": data_seed, 
                 "states": states[shuffled_inds], 
