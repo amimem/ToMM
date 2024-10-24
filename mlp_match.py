@@ -133,14 +133,16 @@ def get_data_and_configs(config):
     hash_dict = vars(config).copy()
     hash_dict.pop('outdir')
 
+    # make dash_dict an ordered dict
+    hash_dict = dict(sorted(hash_dict.items()))
+
     # make a subdirectory for each run
     hash_var = hashlib.blake2s(str(hash_dict).encode(), digest_size=5).hexdigest()
-    config.hash=hash_var
+    config.hash = hash_var
+
     train_dir = os.path.join(save_dir, hash_var)
     if not os.path.exists(train_dir):
         os.makedirs(train_dir)
-
-    config.hash = hash_var
 
     run_dict = {
         "corr": data_config.corr,
