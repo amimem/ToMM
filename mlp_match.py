@@ -35,7 +35,7 @@ parser.add_argument('--inter', type=str, default='None', help='label of interact
 parser.add_argument('--S', type=int, default=8, help='state space dimension')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 parser.add_argument('--wagent', type=float, default=1.0, help='weight of agent-dependence')
-parser.add_argument('--state_corr_len', type=float, default=1.0, help='state correlation length')
+parser.add_argument('--state_corr_len', type=float, default=8.0, help='state correlation length')
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')

@@ -134,7 +134,7 @@ def gen_logit_dataset(config):
     for ix, data_seed in enumerate(data_seed_list):
         print(f"running seed {data_seed} of {len(data_seed_list)}")
         rng = np.random.default_rng(seed=data_seed)
-        num_axis_values = 256
+        num_axis_values = 20
         # model=logit(SimpleNamespace(**config),rng)
         model=logit2(SimpleNamespace(**config),num_axis_values,rng)
 
@@ -147,7 +147,6 @@ def gen_logit_dataset(config):
             actions = np.vstack(actions)
             # save data
             shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
-            print(states.shape)
             datasets[f"{label}_dataset_{data_seed}"] = { 
                 "data_seed": data_seed, 
                 "states": states[shuffled_inds], 
