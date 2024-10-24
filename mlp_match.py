@@ -32,9 +32,9 @@ parser.add_argument('--inter', type=str, default='None', help='label of interact
 
 
 # Fixed training data properties
-parser.add_argument('--S', type=int, default=8, help='state space dimension')
+parser.add_argument('--S', type=int, default=2, help='state space dimension. For logit2 model must be 2')
+parser.add_argument('--SL', type=int, default=20, help='number values along state space dimensions')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
-parser.add_argument('--wagent', type=float, default=1.0, help='weight of agent-dependence')
 parser.add_argument('--state_corr_len', type=float, default=8.0, help='state correlation length')
 
 # Training parameters
@@ -116,7 +116,7 @@ def get_data_and_configs(config):
     data_config = SimpleNamespace(**data_config['file_attrs'])
     model_config = SimpleNamespace(**config['model_settings'])
     config = SimpleNamespace(**config)
-    print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}, wagent={data_config.agent_weight}")
+    print(f"loaded data: N={data_config.num_agents}, A={data_config.num_actions}, n_samp={data_config.num_train_samples}, c={data_config.corr}, l={data_config.state_corr_len}")
     
     model_config.num_actions = data_config.num_actions
     model_config.num_agents = data_config.num_agents
@@ -144,8 +144,8 @@ def get_data_and_configs(config):
 
     run_dict = {
         "corr": data_config.corr,
-        "wagent": data_config.agent_weight,
         "state_corr_len": data_config.state_corr_len,
+        "num_axis_values": data_config.num_axis_values,
         "state_dim": data_config.state_dim,
         "num_actions": model_config.num_actions,
         "num_train_samples":data_config.num_train_samples,
@@ -290,8 +290,8 @@ def train(config):
     # timestamp = time.strftime("%Y%m%d-%H%M%S")
     if args.use_wandb:
         wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
-            ['N','P','l','c','sc','lr','im','dt','pe','wag'],
-            ['num_agents','Pactual','seq_len','corr','state_corr_len','learning_rate','inter_model_type','decoder_type','use_pos_enc','wagent']
+            ['N','P','l','c','sc','lr','im','dt','pe','scl','snl'],
+            ['num_agents','Pactual','seq_len','corr','state_corr_len','learning_rate','inter_model_type','decoder_type','use_pos_enc','state_corr_len','num_axis_values']
             )])
         run=wandb.init(project="ToMMM", entity="abstraction", group="post_aamas",job_type=None, config=run_dict, name=wandb_run_name)
 
@@ -373,10 +373,10 @@ def collect_parameters_and_gen_data():
         "num_actions": args.A,
         "num_agents": args.N,
         "state_dim": args.S,
-        "model_name":"logit",
+        "model_name":"logit2",
         "corr": args.corr,
-        "agent_weight": args.wagent,
-        "state_corr_len":args.state_corr_len
+        "state_corr_len":args.state_corr_len,
+        "num_axis_values":args.SL
     }
 
     data_dir=get_logit_dataset_pathname(dataset_config)
@@ -408,7 +408,6 @@ def collect_parameters_and_gen_data():
 
 if __name__ == "__main__":
     #at N=10
-    #args.wagent=[0,1,10]
     #args.use_pos_enc=[0,1]
     #args.seq_len=[1,16]
     #args.inter_model=[None,attn]

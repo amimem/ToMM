@@ -362,47 +362,50 @@ def get_width(v):
     return W
 #------------------data generation models
 
-class logit(nn.Module):
-    def __init__(self, config,rng):
-        super().__init__()
+#-----------Deprecated!
+# class logit(nn.Module): 
+#     def __init__(self, config,rng):
+#         super().__init__()
 
-        assert config.num_actions ==2, "implemented for num_action = 2"
-        mean = np.zeros(config.num_agents)
-        #scales poorly with the number of agents. A mixture model would be WAY more efficient
-        cov = config.corr*np.ones((config.num_agents,config.num_agents))+\
-            (1-config.corr)*np.eye(config.num_agents)
-        num_obs = 2**config.state_dim
-        # action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
-        action_at_corr1_logits = np.sqrt(1 - config.corr)* rng.normal(size=(num_obs,config.num_agents))\
-                + np.sqrt(config.corr) * rng.normal(size=num_obs)[:,np.newaxis]
+#         assert config.num_actions ==2, "implemented for num_action = 2"
+#         mean = np.zeros(config.num_agents)
+#         #scales poorly with the number of agents. A mixture model would be WAY more efficient
+#         cov = config.corr*np.ones((config.num_agents,config.num_agents))+\
+#             (1-config.corr)*np.eye(config.num_agents)
+#         num_obs = 2**config.state_dim
+#         # action_at_corr1_logits = rng.multivariate_normal(mean,cov,size=num_obs) # num_samples,num_agents
+#         action_at_corr1_logits = np.sqrt(1 - config.corr)* rng.normal(size=(num_obs,config.num_agents))\
+#                 + np.sqrt(config.corr) * rng.normal(size=num_obs)[:,np.newaxis]
 
-        # introduce label disorder for this action
-        self.action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
-        # (Assuming action selection based on sign of logit)
-        # action 0 logit is same as action at corr=1 logit if action at corr=1 is 0, else it is the negative of action logit at corr=1
-        self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
-        self.mask = config.num_actions**np.arange(config.state_dim)
-        self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
-        self.agent_weight_factor = config.agent_weight
+#         # introduce label disorder for this action
+#         self.action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
+#         # (Assuming action selection based on sign of logit)
+#         # action 0 logit is same as action at corr=1 logit if action at corr=1 is 0, else it is the negative of action logit at corr=1
+#         self.action_0_logits = action_at_corr1_logits * np.power(-1,self.action_at_corr1)[np.newaxis,:]
+#         self.mask = config.num_actions**np.arange(config.state_dim)
+#         self.state_fn = rng.integers(0,high=config.state_dim,size=num_obs)
+#         self.agent_weight_factor = 1
 
-    def forward(self, state):
-        # dim(state): batch_size, state_dim
-        obs=(state>0) # batch_size, state_dim
-        state_idx = self.obs2index(obs)
-        agent_component = self.action_0_logits[state_idx]
-        state_component = state[self.state_fn[state_idx]]
+#     def forward(self, state):
+#         # dim(state): batch_size, state_dim
+#         obs=(state>0) # batch_size, state_dim
+#         state_idx = self.obs2index(obs)
+#         agent_component = self.action_0_logits[state_idx]
+#         state_component = state[self.state_fn[state_idx]]
         
-        action_0_logits = (state_component + self.agent_weight_factor*agent_component)/np.sqrt(self.agent_weight_factor+1)
-        return np.vstack([action_0_logits,-action_0_logits]).T
+#         action_0_logits = (state_component + self.agent_weight_factor*agent_component)/np.sqrt(self.agent_weight_factor+1)
+#         return np.vstack([action_0_logits,-action_0_logits]).T
 
-    def obs2index(self, obs):
-        return np.sum(self.mask * obs[np.newaxis,:],-1)
+#     def obs2index(self, obs):
+#         return np.sum(self.mask * obs[np.newaxis,:],-1)
+#------------------------------
 
 class logit2(nn.Module):
-    def __init__(self, config,num_axis_values,rng):
+    def __init__(self, config,rng):
         super().__init__()
         shared_correlation_length = config.state_corr_len
         private_correlation_length = config.state_corr_len
+        num_axis_values = config.num_axis_values
         nx=ny=num_axis_values
         sys_size=[nx,ny]
         # lattice_values=np.arange(-int(sys_size[0]/2),int(sys_size[0]/2)+1)
@@ -446,8 +449,6 @@ class logit2(nn.Module):
         #add agent-agent correlation by adding shared component and  #flip sign according to desired action at rho=1.
         self.action_0_logits=np.sqrt(1 - config.corr)*self.action_0_logits + shared_field[np.newaxis,:,:] * ((np.sqrt(config.corr)*(2*self.action_at_corr1-1))[:,np.newaxis,np.newaxis])
        
-        print('ok!')
-
     def forward(self, state):
         action_0_logits = self.action_0_logits[:,state[0],state[1]]
         return np.vstack([action_0_logits,-action_0_logits]).T

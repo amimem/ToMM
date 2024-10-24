@@ -3,7 +3,7 @@ import h5py
 import numpy as np
 import yaml
 import torch
-from models import logit,logit2
+import models
 from types import SimpleNamespace
 import os
 import hashlib
@@ -112,7 +112,7 @@ class ContextDataset(Dataset):
         
         return states, action_onehots_seq, target_actions
 
-def sample_states(num_samples,state_dim,num_axis_values,rng):
+def sample_states(num_samples,state_dim, num_axis_values,rng):
     # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
     # states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
     
@@ -120,9 +120,8 @@ def sample_states(num_samples,state_dim,num_axis_values,rng):
     # rho = np.exp(-1 / state_corr_len)
     # for i in range(1, num_samples):
     #     states[i] = rho * states[i-1] + np.sqrt(1 - rho**2) * states[i]
-
-    states=rng.random(size=(num_samples,state_dim)) > 0.5
-    states=np.mod(np.cumsum(states, axis=0), num_axis_values)
+    states=2*(rng.random(size=(num_samples,state_dim)) > 0.5)-1 #steps
+    states=np.mod(np.cumsum(states, axis=0), num_axis_values) #wrapped walk
 
     return states
 
@@ -134,12 +133,12 @@ def gen_logit_dataset(config):
     for ix, data_seed in enumerate(data_seed_list):
         print(f"running seed {data_seed} of {len(data_seed_list)}")
         rng = np.random.default_rng(seed=data_seed)
-        num_axis_values = 20
-        # model=logit(SimpleNamespace(**config),rng)
-        model=logit2(SimpleNamespace(**config),num_axis_values,rng)
+        
+        model_class_ = getattr(models, config['model_name'])
+        model = model_class_(SimpleNamespace(**config),rng)
 
         for label in ['train','test']:
-            states=sample_states(config[f'num_{label}_samples'],config['state_dim'],num_axis_values,rng)
+            states=sample_states(config[f'num_{label}_samples'], config['state_dim'],config['num_axis_values'], rng)
             actions= []
             for state in states:
                 action_probability_vectors = model.forward(state)
