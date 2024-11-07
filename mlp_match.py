@@ -375,7 +375,7 @@ def collect_parameters_and_gen_data():
         "num_actions": args.A,
         "num_agents": args.N,
         "state_dim": args.S,
-        "model_name":"logit2",
+        "model_name":"logit3",
         "corr": args.corr,
         "state_corr_len":args.state_corr_len,
         "num_axis_values":args.SL

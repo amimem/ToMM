@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import math
+from sklearn.neighbors import NearestNeighbors
 
 class STOMP(nn.Module):
     def __init__(self, config, device):
@@ -139,7 +140,9 @@ class SeqEnc(nn.Module):
         #reshape and concatentate states and actions
         batch_size, seq_len, num_agents, num_actions = actions_seq.shape
         # batch_size, seq_len, state_dim = state_seq.shape
-        state_seq = torch.unsqueeze(state_seq, 2).repeat((1, 1, num_agents, 1))
+        # state_seq = torch.unsqueeze(state_seq, 2).repeat((1, 1, num_agents, 1))
+        state_seq = torch.reshape(state_seq, actions_seq.shape)
+
         # batch_size, seq_len, num_agents, state_dim = state_seq.shape
         x = torch.transpose(
             torch.cat([state_seq, actions_seq], dim=-1), 0, 1)
@@ -400,58 +403,118 @@ def get_width(v):
 #         return np.sum(self.mask * obs[np.newaxis,:],-1)
 #------------------------------
 
-class logit2(nn.Module):
+# class logit2(nn.Module):
+#     def __init__(self, config,rng):
+#         super().__init__()
+#         self.num_agents = config.num_agents
+#         shared_correlation_length = config.state_corr_len
+#         private_correlation_length = config.state_corr_len
+#         num_axis_values = config.num_axis_values
+#         nx=ny=num_axis_values
+#         sys_size=[nx,ny]
+#         # lattice_values=np.arange(-int(sys_size[0]/2),int(sys_size[0]/2)+1)
+#         # self.X,self.Y=np.meshgrid(lattice_values,lattice_values)           
+#         # amplitude = np.sqrt(np.power(np.sqrt(self.X**2 + self.Y**2),alpha)) #seen examples without 
+#         # amplitude[(self.X==0) & (self.Y==0)]=0.
+#         self.action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
+#         # self.action_0_logits=rng.normal(size=[config.num_agents+1]+sys_size)
+#         # #add spatial correlation by convolving (here by multiplying in Fourier)
+#         # self.action_0_logits=np.fft.fft2(self.action_0_logits)
+#         # self.action_0_logits=np.fft.ifft2(self.action_0_logits * amplitude).real
+
+#         def power_spectrum(k_squared,corr_len):
+#             #Gaussian
+#             return (2 * np.pi * corr_len**2) * \
+#                np.exp(-k_squared * corr_len**2 / 4.0)
+#         kx = 2.0 * np.pi * np.fft.fftfreq(num_axis_values, d=1)
+#         ky = 2.0 * np.pi * np.fft.fftfreq(num_axis_values, d=1)
+#         sys_size=[num_axis_values]*2
+#         kxx, kyy = np.meshgrid(kx, ky, indexing='ij')
+#         k_squared = kxx**2 + kyy**2
+
+#         self.action_0_logits = rng.normal(size=[config.num_agents+1]+sys_size) + \
+#                         1j * rng.normal(size=[config.num_agents+1]+sys_size)
+#         shared_coeffs = self.action_0_logits[-1]
+#         self.action_0_logits = self.action_0_logits*(np.sqrt(power_spectrum(k_squared,private_correlation_length) / 2)[np.newaxis,:,:])
+#         self.action_0_logits[-1] = shared_coeffs*(np.sqrt(power_spectrum(k_squared,shared_correlation_length) / 2))
+#         # Ensure real field through conjugate symmetry
+#         self.action_0_logits[:,0, 0] = np.real(self.action_0_logits[:,0, 0])
+#         if nx % 2 == 0:
+#             self.action_0_logits[:,nx//2, :] = np.real(self.action_0_logits[:,nx//2, :])
+#         if ny % 2 == 0:
+#             self.action_0_logits[:,:, ny//2] = np.real(self.action_0_logits[:,:, ny//2])
+#         self.action_0_logits = np.real(np.fft.ifft2(self.action_0_logits))
+        
+#         # Normalize (ensures uniformily random policy marginals)
+#         self.action_0_logits -= np.mean(self.action_0_logits,axis=(1,2))[:,np.newaxis,np.newaxis]
+#         self.action_0_logits /= np.std(self.action_0_logits,axis=(1,2))[:,np.newaxis,np.newaxis]
+#         shared_field =self.action_0_logits[-1]
+#         self.action_0_logits=self.action_0_logits[:-1]
+#         #add agent-agent correlation by adding shared component and  #flip sign according to desired action at rho=1.
+#         # self.action_0_logits=np.sqrt(1 - config.corr)*self.action_0_logits + shared_field[np.newaxis,:,:] * ((np.sqrt(config.corr)*(2*self.action_at_corr1-1))[:,np.newaxis,np.newaxis])
+#         #this is [config.num_agents]+sys_size dimensions
+
+#         #knearestneighbor model
+#         self.k=10
+#         # test_set = np.array([[x,y] for x,y in zip(np.arange(num_axis_values),np.arange(num_axis_values))])  
+#         # print(test_set.shape)
+#         # self.nearest_k_model = NearestNeighbors(n_neighbors=self.k+1)  
+#         # self.nearest_k_model.fit(test_set)
+#         self.nearest_k_model = NearestNeighbors(n_neighbors=self.k+1)  
+
+#     def forward(self, state):
+#         # print(self.action_0_logits.shape)
+#         # deltaS=state[np.newaxis,:,:]-state[:,np.newaxis,:]
+#         # action_0_logits = self.action_0_logits[:,state[0],state[1]]
+#         action_0_logits = self.action_0_logits[np.arange(self.num_agents),state[:,0],state[:,1]]
+        
+#         self.nearest_k_model.fit(state)
+#         dists, inds = self.nearest_k_model.kneighbors(state)
+#         dists[:,0] = 1 #set self weight to 1
+#         weights=np.where(dists[:,1:]!=0,1/dists[:,1:],np.Inf*np.ones(dists[:,1:].shape))
+#         action_0_logits=action_0_logits + 1/self.k * np.array([np.dot(action_0_logits[inds[i,1:]],weights[i]) for i in range(len(action_0_logits))])
+#         # print(action_0_logits.shape)
+#         return np.vstack([action_0_logits,-action_0_logits]).T
+
+class logit3(nn.Module):
     def __init__(self, config,rng):
         super().__init__()
-        shared_correlation_length = config.state_corr_len
-        private_correlation_length = config.state_corr_len
-        num_axis_values = config.num_axis_values
-        nx=ny=num_axis_values
-        sys_size=[nx,ny]
-        # lattice_values=np.arange(-int(sys_size[0]/2),int(sys_size[0]/2)+1)
-        # self.X,self.Y=np.meshgrid(lattice_values,lattice_values)           
-        # amplitude = np.sqrt(np.power(np.sqrt(self.X**2 + self.Y**2),alpha)) #seen examples without 
-        # amplitude[(self.X==0) & (self.Y==0)]=0.
-        self.action_at_corr1 = rng.integers(0,high=config.num_actions,size=config.num_agents)
-        # self.action_0_logits=rng.normal(size=[config.num_agents+1]+sys_size)
-        # #add spatial correlation by convolving (here by multiplying in Fourier)
-        # self.action_0_logits=np.fft.fft2(self.action_0_logits)
-        # self.action_0_logits=np.fft.ifft2(self.action_0_logits * amplitude).real
 
-        def power_spectrum(k_squared,corr_len):
-            #Gaussian
-            return (2 * np.pi * corr_len**2) * \
-               np.exp(-k_squared * corr_len**2 / 4.0)
-        kx = 2.0 * np.pi * np.fft.fftfreq(num_axis_values, d=1)
-        ky = 2.0 * np.pi * np.fft.fftfreq(num_axis_values, d=1)
-        sys_size=[num_axis_values]*2
-        kxx, kyy = np.meshgrid(kx, ky, indexing='ij')
-        k_squared = kxx**2 + kyy**2
+        #knearestneighbor model
+        self.k=10
+        self.nearest_k_model = NearestNeighbors(n_neighbors=self.k+1)  
 
-        self.action_0_logits = rng.normal(size=[config.num_agents+1]+sys_size) + \
-                        1j * rng.normal(size=[config.num_agents+1]+sys_size)
-        shared_coeffs = self.action_0_logits[-1]
-        self.action_0_logits = self.action_0_logits*(np.sqrt(power_spectrum(k_squared,private_correlation_length) / 2)[np.newaxis,:,:])
-        self.action_0_logits[-1] = shared_coeffs*(np.sqrt(power_spectrum(k_squared,shared_correlation_length) / 2))
-        # Ensure real field through conjugate symmetry
-        self.action_0_logits[:,0, 0] = np.real(self.action_0_logits[:,0, 0])
-        if nx % 2 == 0:
-            self.action_0_logits[:,nx//2, :] = np.real(self.action_0_logits[:,nx//2, :])
-        if ny % 2 == 0:
-            self.action_0_logits[:,:, ny//2] = np.real(self.action_0_logits[:,:, ny//2])
-        self.action_0_logits = np.real(np.fft.ifft2(self.action_0_logits))
-        
-        # Normalize (ensures uniformily random policy marginals)
-        self.action_0_logits -= np.mean(self.action_0_logits,axis=(1,2))[:,np.newaxis,np.newaxis]
-        self.action_0_logits /= np.std(self.action_0_logits,axis=(1,2))[:,np.newaxis,np.newaxis]
-        shared_field =self.action_0_logits[-1]
-        self.action_0_logits=self.action_0_logits[:-1]
-        #add agent-agent correlation by adding shared component and  #flip sign according to desired action at rho=1.
-        self.action_0_logits=np.sqrt(1 - config.corr)*self.action_0_logits + shared_field[np.newaxis,:,:] * ((np.sqrt(config.corr)*(2*self.action_at_corr1-1))[:,np.newaxis,np.newaxis])
-       
+        #if on relative vectors
+        self.dec = rng.random(size=(config.num_actions-1,self.k*config.state_dim))
+
+
     def forward(self, state):
-        action_0_logits = self.action_0_logits[:,state[0],state[1]]
+        # state: num_agents, state dim
+        # deltaS=state[np.newaxis,:,:]-state[:,np.newaxis,:] #num_agents, num_agents, state_dim
+        # print(state.shape)
+        self.nearest_k_model.fit(state)
+        dists, inds = self.nearest_k_model.kneighbors(state) # num_agents x k
+        # action_0_logits = self.dec @ dists[:,1:].T #num_agents 
+        # action_0_logits = self.dec @ deltaS[:,inds[:,1:],:].reshape((num_agents,state_dim*self.k)) 
+        
+        # num_agents, k = inds.shape
+        num_agents, state_dim = state.shape
+        out=np.zeros((num_agents,self.k*state_dim))
+        for ag in range(num_agents):
+            deltaS=state-state[ag,:]
+            out[ag,:]=deltaS[inds[ag,1:],:].flatten()
+
+        # deltaS = state[np.newaxis,:,:]-state[:,np.newaxis,:]
+        # out=deltaS[:,inds,:].reshape((num_agents,state_dim*self.k)) 
+
+        action_0_logits = (self.dec @ out.T).flatten() # num_agents
         return np.vstack([action_0_logits,-action_0_logits]).T
+
+        # dists[:,0] = 1 #set self weight to 1
+        # weights=np.where(dists[:,1:]!=0,1/dists[:,1:],np.Inf*np.ones(dists[:,1:].shape))
+        # action_0_logits=action_0_logits + 1/self.k * np.array([np.dot(action_0_logits[inds[i,1:]],weights[i]) for i in range(len(action_0_logits))])
+        # print(action_0_logits.shape)
+        # return np.vstack([action_0_logits,-action_0_logits]).T
 
 #------------------illustrative MLP baselines--------------------------
 

@@ -112,7 +112,7 @@ class ContextDataset(Dataset):
         
         return states, action_onehots_seq, target_actions
 
-def sample_states(num_samples,state_dim, num_axis_values,rng):
+def sample_states(num_samples,state_dim, num_axis_values, num_agents, rng):
     # states= 2*rng.uniform(size=(num_samples,state_dim)).astype(np.float32)-1
     # states= 2*rng.normal(size=(num_samples,state_dim)).astype(np.float32)
     
@@ -120,8 +120,10 @@ def sample_states(num_samples,state_dim, num_axis_values,rng):
     # rho = np.exp(-1 / state_corr_len)
     # for i in range(1, num_samples):
     #     states[i] = rho * states[i-1] + np.sqrt(1 - rho**2) * states[i]
-    states=2*(rng.random(size=(num_samples,state_dim)) > 0.5)-1 #steps
-    states=np.mod(np.cumsum(states, axis=0), num_axis_values) #wrapped walk
+    # states=2*(rng.random(size=(num_samples,state_dim)) > 0.5)-1 #steps
+    # states=np.mod(np.cumsum(states, axis=0), num_axis_values) #wrapped walk
+
+    states=rng.integers(num_axis_values,size=(num_samples,num_agents,state_dim))
 
     return states
 
@@ -138,19 +140,23 @@ def gen_logit_dataset(config):
         model = model_class_(SimpleNamespace(**config),rng)
 
         for label in ['train','test']:
-            states=sample_states(config[f'num_{label}_samples'], config['state_dim'],config['num_axis_values'], rng)
-            actions= []
+            states = sample_states(config[f'num_{label}_samples'], config['state_dim'],config['num_axis_values'],config["num_agents"], rng)
+            actions = []
+            statestmp = []
             for state in states:
                 action_probability_vectors = model.forward(state)
                 actions.append(np.argmax(action_probability_vectors, axis=-1))
+                statestmp.append(state.flatten())
             actions = np.vstack(actions)
+            states=np.vstack(statestmp)
+            print(states.shape)
             # save data
             shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
             datasets[f"{label}_dataset_{data_seed}"] = { 
                 "data_seed": data_seed, 
                 "states": states[shuffled_inds], 
-                "actions": actions[shuffled_inds],
-                "preferred_actions": model.action_at_corr1
+                "actions": actions[shuffled_inds]
+                # "preferred_actions": model.action_at_corr1
                 }
 
     return datasets
@@ -224,6 +230,7 @@ def get_logit_dataset_pathname(config):
     else:
         print('at least one of data file and config file does not exist, so will generate both now...')
         datasets = gen_logit_dataset(config)
+        # config['state_dim'] = config['state_dim']*config['num_agents']
         print("saving them...")
         save_datasets(config, datasets, output_path)
 
