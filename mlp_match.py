@@ -23,7 +23,6 @@ parser = argparse.ArgumentParser(description='Experiment parameters')
 
 # Add arguments
 parser.add_argument('--N', type=int, default=10, help='num agents. [10,100,1000]')
-parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
 parser.add_argument('--P', type=int, default=int(5e5), help='training model size.')
 parser.add_argument('--seq_len', type=int, default=16, help='context length.')
 parser.add_argument('--training_sample_budget', type=int, default=int(1e4), help='training sample budget')
@@ -31,11 +30,14 @@ parser.add_argument('--use_pos_enc', type=int, default=1, help='if 1, use positi
 parser.add_argument('--inter', type=str, default='None', help='label of interaction model to use (None,ISAB,attn,ipattn, ...)')
 
 
-# Fixed training data properties
+# training data properties
 parser.add_argument('--S', type=int, default=2, help='state space dimension. For logit2 model must be 2')
 parser.add_argument('--SL', type=int, default=20, help='number values along state space dimensions')
 parser.add_argument('--A', type=int, default=2, help='single-agent action space dimension')
 parser.add_argument('--state_corr_len', type=float, default=8.0, help='state correlation length')
+parser.add_argument('--corr', type=float, default=0.8, help='pairwise correlation in data generated from logit model. [0, 0.5, .99]')
+parser.add_argument('--num_neighbors', type=int, default=10, help='number of nearest neighbors to use in local observation')
+
 
 # Training parameters
 parser.add_argument('--num_epochs', type=int, default=2, help='number of epochs')
@@ -145,6 +147,7 @@ def get_data_and_configs(config):
         os.makedirs(train_dir)
 
     run_dict = {
+        "num_neighbors": data_config.num_neighbors,
         "corr": data_config.corr,
         "state_corr_len": data_config.state_corr_len,
         "num_axis_values": data_config.num_axis_values,
@@ -292,8 +295,8 @@ def train(config):
     # timestamp = time.strftime("%Y%m%d-%H%M%S")
     if args.use_wandb:
         wandb_run_name = '_'.join([sym+str(run_dict[key]) for sym,key in zip(
-            ['N','P','l','c','sc','lr','im','dt','pe','scl','snl'],
-            ['num_agents','Pactual','seq_len','corr','state_corr_len','learning_rate','inter_model_type','decoder_type','use_pos_enc','state_corr_len','num_axis_values']
+            ['N','P','l','c','sc','lr','im','dt','pe','scl','snl','k'],
+            ['num_agents','Pactual','seq_len','corr','state_corr_len','learning_rate','inter_model_type','decoder_type','use_pos_enc','state_corr_len','num_axis_values','num_neighbors']
             )])
         run=wandb.init(project="ToMMM", entity="abstraction", group="post_aamas",job_type=None, config=run_dict, name=wandb_run_name)
 
@@ -376,6 +379,7 @@ def collect_parameters_and_gen_data():
         "num_agents": args.N,
         "state_dim": args.S,
         "model_name":"logit3",
+        "num_neighbors":args.num_neighbors,
         "corr": args.corr,
         "state_corr_len":args.state_corr_len,
         "num_axis_values":args.SL

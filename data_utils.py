@@ -150,6 +150,7 @@ def gen_logit_dataset(config):
             actions = np.vstack(actions)
             states=np.vstack(statestmp)
             print(states.shape)
+            
             # save data
             shuffled_inds= rng.permutation(config[f'num_{label}_samples'])
             datasets[f"{label}_dataset_{data_seed}"] = { 

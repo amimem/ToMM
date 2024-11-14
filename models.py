@@ -481,7 +481,7 @@ class logit3(nn.Module):
         super().__init__()
 
         #knearestneighbor model
-        self.k=10
+        self.k=config.num_neighbors
         self.nearest_k_model = NearestNeighbors(n_neighbors=self.k+1)  
 
         #if on relative vectors
@@ -491,13 +491,9 @@ class logit3(nn.Module):
     def forward(self, state):
         # state: num_agents, state dim
         # deltaS=state[np.newaxis,:,:]-state[:,np.newaxis,:] #num_agents, num_agents, state_dim
-        # print(state.shape)
         self.nearest_k_model.fit(state)
-        dists, inds = self.nearest_k_model.kneighbors(state) # num_agents x k
-        # action_0_logits = self.dec @ dists[:,1:].T #num_agents 
-        # action_0_logits = self.dec @ deltaS[:,inds[:,1:],:].reshape((num_agents,state_dim*self.k)) 
+        inds = self.nearest_k_model.kneighbors(state, return_distance=False) # num_agents x k
         
-        # num_agents, k = inds.shape
         num_agents, state_dim = state.shape
         out=np.zeros((num_agents,self.k*state_dim))
         for ag in range(num_agents):
