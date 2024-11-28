@@ -1,35 +1,34 @@
-# Get Started
-
-The Python version used is 3.10.6.
-
-This repository contains the code from our efforts to formalize a scalable theory of mind in multi-agent systems. We published the design motivation for the architecture used here in a preliminary work at the Agentic Markets workshop at ICML 2024, titled [Scalable Approaches for a Theory of Many Minds](https://openreview.net/forum?id=P0oG5gDh6T).
-
-## Clone the repository
-
+## Install
+Use micromamba
 ```bash
-git clone git@github.com:amimem/ToMM.git
-cd ToMM
+micromamba create -n tomm -f env.yaml 
+micromamba activate tomm
 ```
 
-## Install requirements
-
-Create a virtual environment and install the requirements.
-
+To update `env.yaml`:
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+micromamba env export --from-history > env.yaml
 ```
 
-## Run the code
+# Experiments
+## 20241127-tomnet (current commit)
+### Reproducibility and results
+Ran `python bandit_tomnet.py` (hard-coded args, use commit for repro.).  
+320 runs here: https://wandb.ai/abstraction/ToMMM/workspace?nw=9xprbzmsc5i
 
-```bash
-python mlp_match.py ARGUMENTS
-```
+### Notes
+This is just a ToMNet baseline for bandit settings, using a student-faculty (i.e. student - many teachers) setup:
 
-If you are using Slurm, create a symlink to the scratch folder for the logs.
+**Faculty network:**
+- Sample `bsz` random continuous state vectors of size `dim_states` 
+- For each teacher:
+  - Using teacher-specific `observation_fn` MLPs, map the state to an observation vector of size `dim_observation`.
+  - Using one shared `policy_fn` MLP, map observations to action logits of size `num_actions` and argmax to obtain gold-standard actions.
+- Repeat this process, sampling `history_len` state vectors to get a context of past state/action pairs for each teacher.
 
-```bash
-ln -s $SCRATCH scratch
-sbatch scripts/slurm.sh
-```
+**Student network**: (Bandit ToMNet, Based on [Machine Theory of Mind](https://arxiv.org/pdf/1802.07740) A.3.2 implementation)
+
+- For each teacher:
+  -  Map past state/action pairs to character embedding using a shared `CharNet` encoder.
+  - Concatenate current state embedding with character embedding and feed into a shared `PredictionNet` decoder to obtain action logits.
+  - Compute `cross_entropy` loss using gold-standard actions.
